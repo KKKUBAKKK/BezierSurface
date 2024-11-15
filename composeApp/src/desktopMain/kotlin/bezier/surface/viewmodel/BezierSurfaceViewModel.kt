@@ -2,6 +2,7 @@ package bezier.surface.viewmodel
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import bezier.surface.model.Point3D
@@ -9,6 +10,7 @@ import bezier.surface.model.Triangle
 import java.io.File
 import java.io.IOException
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 
 class BezierSurfaceViewModel {
@@ -16,7 +18,7 @@ class BezierSurfaceViewModel {
     var showWireframe by mutableStateOf(true)
     var showFilled by mutableStateOf(true)
     var lineColor by mutableStateOf(Color.White)
-    var fillColor by mutableStateOf(Color.Magenta.copy(alpha = 0.3f))
+    var fillColor by mutableStateOf(Color.Magenta)
     var lightColor by mutableStateOf(Color.White)
     var rotationX by mutableStateOf(0f)
     var rotationZ by mutableStateOf(0f)
@@ -24,6 +26,11 @@ class BezierSurfaceViewModel {
     var kd by mutableStateOf(0.5f)
     var ks by mutableStateOf(0.5f)
     var m by mutableStateOf(10f)
+    var width by mutableStateOf(1600)
+    var height by mutableStateOf(1200)
+
+    // Buffer for the pixel data
+    private var pixelBuffer by mutableStateOf(IntArray(width * height))
 
     // Control points for a 3x3 Bezier surface
 //    private val controlPoints = loadControlPoints("src/desktopMain/resources/control_points1.txt")
@@ -133,35 +140,31 @@ class BezierSurfaceViewModel {
         )
     }
 
+    fun transformPoint3D(point: Point3D, rotationX: Double, rotationZ: Double): Point3D {
+        // Step 1: Rotate around the X-axis
+        val rotatedX1 = point.x
+        val rotatedY1 = point.y * cos(rotationX) - point.z * sin(rotationX)
+        val rotatedZ1 = point.y * sin(rotationX) + point.z * cos(rotationX)
+
+        // Step 2: Rotate around the Z-axis
+        val rotatedX2 = rotatedX1 * cos(rotationZ) - rotatedY1 * sin(rotationZ)
+        val rotatedY2 = rotatedX1 * sin(rotationZ) + rotatedY1 * cos(rotationZ)
+        val rotatedZ2 = rotatedZ1 // Z remains the same for rotation around the Z-axis
+
+        // Return the new rotated 3D point
+        return Point3D(rotatedX2, rotatedY2, rotatedZ2)
+    }
+
     // Adjusts the color to the light TODO: Implement lighting
     private fun adjustColor(color: Color, normal: Point3D): Color {
         val lightDirection = Point3D(0.0, 0.0, 1.0)
         val dotProduct = normal.x * lightDirection.x + normal.y * lightDirection.y + normal.z * lightDirection.z
-        val intensity = if (dotProduct > 0) dotProduct else 0.0
-        return color.copy(alpha = intensity.toFloat())
-    }
-
-    // Draw a line pixel by pixel
-    private fun drawLinePixelByPixel(p1: Offset, p2: Offset, drawScope: DrawScope) {
-        val x1 = p1.x
-        val y1 = p1.y
-        val x2 = p2.x
-        val y2 = p2.y
-
-        val dx = x2 - x1
-        val dy = y2 - y1
-        val steps = if (Math.abs(dx) > Math.abs(dy)) Math.abs(dx) else Math.abs(dy)
-        val xIncrement = dx / steps
-        val yIncrement = dy / steps
-
-        var x = x1
-        var y = y1
-
-        for (i in 0..steps.toInt()) {
-            drawScope.drawCircle(fillColor, radius = 1f, center = Offset(x, y))
-            x += xIncrement
-            y += yIncrement
-        }
+        val diffuseIntensity = max(dotProduct, 0.0)
+        val specularIntensity = if (dotProduct > 0) Math.pow(dotProduct, m.toDouble()) else 0.0
+        val intensity = kd * diffuseIntensity + ks * specularIntensity
+        return color.copy(red = (color.red * intensity).toFloat(),
+            green = (color.green * intensity).toFloat(),
+            blue = (color.blue * intensity).toFloat())
     }
 
     // Interpolate between two points
@@ -171,31 +174,54 @@ class BezierSurfaceViewModel {
         return Offset(x, y)
     }
 
+    private fun Offset.toPoint3D(): Point3D {
+        return Point3D(x.toDouble(), y.toDouble(), 0.0)
+    }
+
     // Fill the triangle
-    private fun fillTriangle(p1: Offset, p2: Offset, p3: Offset, drawScope: DrawScope) {
+    private fun fillTriangle(triangle: Triangle, canvasWidth: Float, canvasHeight: Float, drawScope: DrawScope) {
+        val p1 = transformPoint(triangle.v1, canvasWidth, canvasHeight)
+        val p2 = transformPoint(triangle.v2, canvasWidth, canvasHeight)
+        val p3 = transformPoint(triangle.v3, canvasWidth, canvasHeight)
+
         // Sort vertices by y-coordinate (top to bottom)
         val vertices = listOf(p1, p2, p3).sortedBy { it.y }
-        val top = vertices[0]
-        val middle = vertices[1]
-        val bottom = vertices[2]
+        val (top, middle, bottom) = vertices
 
-        // Draw from top to middle
-        for (y in top.y.toInt()..<middle.y.toInt()) {
+        // Calculate the color coefficients
+        val kd = 0.5f
+        val ks = 0.5f
+        val m = 10f
+
+        for (y in top.y.toInt()..<bottom.y.toInt()) {
             val left = interpolate(y.toFloat(), top, middle)
             val right = interpolate(y.toFloat(), top, bottom)
-            drawLinePixelByPixel(left, right, drawScope)
-        }
 
-        // Draw from middle to bottom
-        for (y in middle.y.toInt()..bottom.y.toInt()) {
-            val left = interpolate(y.toFloat(), middle, bottom)
-            val right = interpolate(y.toFloat(), top, bottom)
-            drawLinePixelByPixel(left, right, drawScope)
+            for (x in left.x.toInt()..right.x.toInt()) {
+                val offset = Offset(x.toFloat(), y.toFloat())
+                val color = adjustColor(fillColor, calculateNormal(top.toPoint3D(), middle.toPoint3D(), bottom.toPoint3D()))
+                drawScope.drawRect(color = color, topLeft = offset, size = Size(1f, 1f))
+            }
         }
     }
 
+    // Calculate the normal vector of a triangle
+    private fun calculateNormal(p1: Point3D, p2: Point3D, p3: Point3D): Point3D {
+        val v1 = Point3D(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z)
+        val v2 = Point3D(p3.x - p1.x, p3.y - p1.y, p3.z - p1.z)
+        val normal = Point3D(
+            v1.y * v2.z - v1.z * v2.y,
+            v1.z * v2.x - v1.x * v2.z,
+            v1.x * v2.y - v1.y * v2.x
+        )
+        return normal.normalized()
+    }
+
     // Draw the surface
-    fun drawSurface(drawScope: DrawScope) {
+    fun drawSurface(drawScope: DrawScope, width: Int, height: Int) {
+        this.width = width
+        this.height = height
+
         val triangles = generateMesh(resolution)
 
         with(drawScope) {
@@ -205,30 +231,7 @@ class BezierSurfaceViewModel {
             // Draw filled triangles
             if (showFilled) {
                 triangles.forEach { triangle ->
-                    val p1 = transformPoint(triangle.v1, canvasWidth, canvasHeight)
-                    val p2 = transformPoint(triangle.v2, canvasWidth, canvasHeight)
-                    val p3 = transformPoint(triangle.v3, canvasWidth, canvasHeight)
-
-                    fillTriangle(p1, p2, p3, drawScope)
-
-//                    // Bucket sort the edges
-//                    val edges = listOf(
-//                        Pair(p1, p2),
-//                        Pair(p2, p3),
-//                        Pair(p3, p1)
-//                    ).sortedBy { it.first.y }
-//
-//                    // Fill the triangle
-//                    for (y in edges.first().first.y.toInt()..edges.last().first.y.toInt()) {
-//                        val left = edges.firstOrNull { it.first.y <= y && it.second.y > y }
-//                            ?.let { lerp(it.first, it.second, (y - it.first.y) / (it.second.y - it.first.y)) }
-//                        val right = edges.lastOrNull { it.first.y <= y && it.second.y > y }
-//                            ?.let { lerp(it.first, it.second, (y - it.first.y) / (it.second.y - it.first.y)) }
-//
-//                        if (left != null && right != null) {
-//                            drawLine(Color.Magenta.copy(alpha = 0.3f), left, right)
-//                        }
-//                    }
+                    fillTriangle(triangle, canvasWidth, canvasHeight, drawScope)
                 }
             }
 
@@ -246,11 +249,4 @@ class BezierSurfaceViewModel {
             }
         }
     }
-
-//    private fun lerp(p1: Offset, p2: Offset, t: Float): Offset {
-//        return Offset(
-//            p1.x + (p2.x - p1.x) * t.toFloat(),
-//            p1.y + (p2.y - p1.y) * t.toFloat()
-//        )
-//    }
 }

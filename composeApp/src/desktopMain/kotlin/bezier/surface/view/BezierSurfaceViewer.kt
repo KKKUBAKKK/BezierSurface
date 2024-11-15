@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bezier.surface.viewmodel.BezierSurfaceViewModel
+import org.jetbrains.skia.Bitmap
 
 @Composable
 fun BezierSurfaceViewer() {
@@ -23,19 +24,9 @@ fun BezierSurfaceViewer() {
         Canvas(modifier = Modifier
             .weight(2f)
             .fillMaxHeight()
-            .padding(end = 16.dp)
+            .padding(end = 16.dp),
         ) {
-            viewModel.drawSurface(this)
-
-//            // Calculate the center of the canvas
-//            val centerX = size.width / 2
-//            val centerY = size.height / 2
-//
-//            // Move the origin to the center of the canvas
-//            translate(centerX, centerY) {
-//                // Draw the surface with the adjusted origin
-//                viewModel.drawSurface(this)
-//            }
+            viewModel.drawSurface(this, this.size.width.toInt(), this.size.height.toInt())
         }
 
         // Controls
@@ -134,6 +125,13 @@ fun BezierSurfaceViewer() {
                 onValueChange = { viewModel.m = it },
                 valueRange = 1f..100f,
                 modifier = Modifier.fillMaxWidth().height(20.dp)
+            )
+
+            // Color picker
+            Text("Light Color", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            ColorPickerControl(
+                initialColor = viewModel.lightColor,
+                onColorSelected = { viewModel.lightColor = it }
             )
         }
     }

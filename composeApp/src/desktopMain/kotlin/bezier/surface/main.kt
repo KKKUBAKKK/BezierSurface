@@ -10,8 +10,10 @@ import bezier.surface.view.BezierSurfaceViewer
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Bezier Surface Viewer"
+        title = "Bezier Surface Viewer",
+        resizable = true
     ) {
+        this.window.setSize(1600, 1200)
         MaterialTheme {
             Surface(color = Color.DarkGray) {
                 BezierSurfaceViewer()
