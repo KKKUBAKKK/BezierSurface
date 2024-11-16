@@ -26,7 +26,9 @@ fun BezierSurfaceViewer() {
             .fillMaxHeight()
             .padding(end = 16.dp),
         ) {
-            viewModel.drawSurface(this, this.size.width.toInt(), this.size.height.toInt())
+            this.translate(this.size.width / 2, this.size.height / 2) {
+                viewModel.drawSurface(this, width = this.size.width.toInt(), height = this.size.height.toInt())
+            }
         }
 
         // Controls

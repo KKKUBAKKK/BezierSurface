@@ -1,7 +1,7 @@
 package bezier.surface.model
 
 data class Triangle(
-    val v1: Point3D,
-    val v2: Point3D,
-    val v3: Point3D
+    val v1: Vertex,
+    val v2: Vertex,
+    val v3: Vertex
 )

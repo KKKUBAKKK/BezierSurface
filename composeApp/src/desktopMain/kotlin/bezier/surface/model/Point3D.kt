@@ -22,4 +22,16 @@ data class Point3D(
             this  // Return the point as is if its magnitude is 0
         }
     }
+
+    // Function to calculate the cross product of two points
+    infix fun cross(v2: Point3D): Point3D {
+        val x = y * v2.z - z * v2.y
+        val y = z * v2.x - x * v2.z
+        val z = x * v2.y - y * v2.x
+        return Point3D(x, y, z)
+    }
+
+    companion object {
+        fun Zero() = Point3D(0.0, 0.0, 0.0)
+    }
 }
