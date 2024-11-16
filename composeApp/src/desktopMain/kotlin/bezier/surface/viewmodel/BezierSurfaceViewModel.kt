@@ -30,6 +30,24 @@ class BezierSurfaceViewModel {
     var height by mutableStateOf(1200)
 
     private var pixelBuffer by mutableStateOf(IntArray(width * height))
+    private var zBuffer = FloatArray(width * height) { Float.NEGATIVE_INFINITY }
+
+    private fun transformToScreen(vertex: Vertex, canvasWidth: Float, canvasHeight: Float): Point2D {
+        val rotatedVertex = transformVertex(vertex, mesh?.rotationX ?: 0.0, mesh?.rotationZ ?: 0.0)
+        val scale = 200.0
+        val perspectiveZ = 1.0 + rotatedVertex.point.z * 0.2
+
+        val centerX = canvasWidth / 2
+        val centerY = canvasHeight / 2
+
+        val screenX = ((rotatedVertex.point.x / perspectiveZ) * scale).toFloat()
+        val screenY = ((rotatedVertex.point.y / perspectiveZ) * scale).toFloat()
+        val screenZ = rotatedVertex.point.z.toFloat()
+
+        val color = adjustColor(fillColor, rotatedVertex.normal)
+
+        return Point2D(screenX, screenY, screenZ, color)
+    }
 
     private val controlPoints = Array(4) { i ->
         Array(4) { j ->
@@ -191,37 +209,92 @@ class BezierSurfaceViewModel {
         }
     }
 
-    fun drawSurface(drawScope: DrawScope, width: Int, height: Int) {
-        this.width = width
-        this.height = height
+//    fun drawSurface(drawScope: DrawScope, width: Int, height: Int) {
+//        this.width = width
+//        this.height = height
+//
+//        if (mesh == null || mesh?.resolution != resolution) {
+//            mesh = generateMesh(resolution)
+//        }
+//
+//        if (mesh?.rotationX != rotationX.toDouble() || mesh?.rotationZ != rotationZ.toDouble()) {
+//            mesh?.rotatedTriangles = mesh?.triangles?.map { triangle ->
+//                transformTriangle(triangle, width.toFloat(), height.toFloat())
+//            } ?: emptyList()
+//        }
+//
+//        mesh?.canvasWidth = width
+//        mesh?.canvasHeight = height
+//        mesh?.rotationX = rotationX.toDouble()
+//        mesh?.rotationZ = rotationZ.toDouble()
+//
+//        with(drawScope) {
+//            if (showFilled) {
+//                mesh?.rotatedTriangles?.forEach { triangle ->
+////                    fillTriangle(triangle, ,drawScope)
+//                }
+//            }
+//
+//            if (showWireframe) {
+//                mesh?.rotatedTriangles?.forEach { triangle ->
+//                    drawLine(lineColor, triangle.v1, triangle.v2)
+//                    drawLine(lineColor, triangle.v2, triangle.v3)
+//                    drawLine(lineColor, triangle.v3, triangle.v1)
+//                }
+//            }
+//        }
+//    }
 
-        if (mesh == null || mesh?.resolution != resolution) {
+    fun drawSurface(drawScope: DrawScope, width: Int, height: Int) {
+        if (mesh == null || mesh?.canvasWidth != width || mesh?.canvasHeight != height ||
+            mesh?.rotationX != rotationX.toDouble() || mesh?.rotationZ != rotationZ.toDouble()) {
             mesh = generateMesh(resolution)
         }
 
-        if (mesh?.rotationX != rotationX.toDouble() || mesh?.rotationZ != rotationZ.toDouble()) {
-            mesh?.rotatedTriangles = mesh?.triangles?.map { triangle ->
-                transformTriangle(triangle, width.toFloat(), height.toFloat())
-            } ?: emptyList()
-        }
-
-        mesh?.canvasWidth = width
-        mesh?.canvasHeight = height
-        mesh?.rotationX = rotationX.toDouble()
-        mesh?.rotationZ = rotationZ.toDouble()
+        // Reset buffers
+        zBuffer = FloatArray(width * height) { Float.NEGATIVE_INFINITY }
+        pixelBuffer = IntArray(width * height)
 
         with(drawScope) {
             if (showFilled) {
-                mesh?.rotatedTriangles?.forEach { triangle ->
-//                    fillTriangle(triangle, ,drawScope)
+                val filler = ScanlinePolygonFiller(width, height, zBuffer, pixelBuffer)
+
+                mesh?.triangles?.forEach { triangle ->
+                    val points = listOf(
+                        transformToScreen(triangle.v1, width.toFloat(), height.toFloat()),
+                        transformToScreen(triangle.v2, width.toFloat(), height.toFloat()),
+                        transformToScreen(triangle.v3, width.toFloat(), height.toFloat())
+                    )
+
+                    filler.fillPolygon(points, width, height)
+                }
+
+                // Draw the filled polygons from the pixel buffer
+                for (y in 0 until height) {
+                    for (x in 0 until width) {
+                        val color = Color(pixelBuffer[y * width + x])
+                        if (color != Color.Transparent) {
+                            val tx = (x - width / 2).toFloat()
+                            val ty = (y - height / 2).toFloat()
+                            drawRect(
+                                color = color,
+                                topLeft = Offset(tx, ty),
+                                size = Size(1f, 1f)
+                            )
+                        }
+                    }
                 }
             }
 
             if (showWireframe) {
-                mesh?.rotatedTriangles?.forEach { triangle ->
-                    drawLine(lineColor, triangle.v1, triangle.v2)
-                    drawLine(lineColor, triangle.v2, triangle.v3)
-                    drawLine(lineColor, triangle.v3, triangle.v1)
+                mesh?.triangles?.forEach { triangle ->
+                    val p1 = transformToScreen(triangle.v1, width.toFloat(), height.toFloat())
+                    val p2 = transformToScreen(triangle.v2, width.toFloat(), height.toFloat())
+                    val p3 = transformToScreen(triangle.v3, width.toFloat(), height.toFloat())
+
+                    drawLine(lineColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y))
+                    drawLine(lineColor, Offset(p2.x, p2.y), Offset(p3.x, p3.y))
+                    drawLine(lineColor, Offset(p3.x, p3.y), Offset(p1.x, p1.y))
                 }
             }
         }

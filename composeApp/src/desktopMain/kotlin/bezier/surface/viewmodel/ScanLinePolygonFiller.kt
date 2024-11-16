@@ -1,96 +1,134 @@
 package bezier.surface.viewmodel
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import org.jetbrains.skia.Point
 
 // Edge class to represent a polygon edge
 data class Edge(
     var yMax: Int,
     var xMin: Float,
-    var slopeInverse: Float
+    var slopeInverse: Float,
+    var color: Color,  // Added to support color interpolation
+    var zValue: Float  // Added for z-buffer
+)
+
+data class Point2D(
+    val x: Float,
+    val y: Float,
+    val z: Float = 0f,
+    val color: Color = Color.White
 )
 
 class ScanlinePolygonFiller {
-    // Edge Table - Array of buckets (LinkedLists) for each y-coordinate
     private lateinit var edgeTable: Array<MutableList<Edge>>
-    // Active Edge Table - Contains edges that intersect with current scanline
     private val activeEdgeTable = mutableListOf<Edge>()
+    private var zBuffer: FloatArray
+    private var pixelBuffer: IntArray
+    private var yOffset: Int = 0  // Offset to translate y-coordinates
+    private var height: Int = 0
 
-    /**
-     * Fills a polygon defined by a list of points using the scanline algorithm
-     * @param points List of points defining the polygon vertices
-     * @param width Canvas width
-     * @param height Canvas height
-     * @return IntArray representing the filled polygon pixels
-     */
-    fun fillPolygon(points: List<Point>, width: Int, height: Int): IntArray {
-        if (points.size < 3) return IntArray(width * height)
-
-        // Initialize edge table
+    constructor(width: Int, height: Int, zBuffer: FloatArray, pixelBuffer: IntArray) {
+        this.zBuffer = zBuffer
+        this.pixelBuffer = pixelBuffer
+        this.height = height
+        this.yOffset = height / 2  // Center offset
         initializeEdgeTable(height)
-
-        // Build edge table from polygon vertices
-        buildEdgeTable(points)
-
-        // Create pixel buffer
-        val pixelBuffer = IntArray(width * height)
-
-        // Process each scanline
-        var y = findFirstScanline()
-        val lastScanline = findLastScanline()
-
-        while (y <= lastScanline) {
-            // Move edges from ET to AET if their yMin equals current scanline
-            moveEdgesToAET(y)
-
-            // Remove edges from AET if their yMax equals current scanline
-            removeEdgesFromAET(y)
-
-            // Sort AET by x-coordinate
-            activeEdgeTable.sortBy { it.xMin }
-
-            // Fill pixels between edge pairs
-            fillScanline(y, pixelBuffer, width)
-
-            // Increment y
-            y++
-
-            // Update x-coordinates for edges in AET
-            updateAETEdges()
-        }
-
-        return pixelBuffer
     }
 
     private fun initializeEdgeTable(height: Int) {
         edgeTable = Array(height) { mutableListOf() }
     }
 
-    private fun buildEdgeTable(points: List<Point>) {
+    // Convert from centered Y to array index
+    private fun yToIndex(y: Float): Int {
+        return (y + yOffset).toInt().coerceIn(0, height - 1)
+    }
+
+    // Convert from array index to centered Y
+    private fun indexToY(index: Int): Float {
+        return (index - yOffset).toFloat()
+    }
+
+    fun fillPolygon(points: List<Point2D>, width: Int, height: Int) {
+        if (points.size < 3) return
+
+        buildEdgeTable(points)
+
+        var yIndex = findFirstScanline()
+        val lastYIndex = findLastScanline()
+
+        while (yIndex <= lastYIndex) {
+            moveEdgesToAET(yIndex)
+            removeEdgesFromAET(yIndex)
+            activeEdgeTable.sortBy { it.xMin }
+            fillScanline(yIndex, width)
+            yIndex++
+            updateAETEdges()
+        }
+    }
+
+    private fun buildEdgeTable(points: List<Point2D>) {
         for (i in points.indices) {
             val current = points[i]
             val next = points[(i + 1) % points.size]
 
-            // Skip horizontal edges
             if (current.y == next.y) continue
 
-            // Determine upper and lower vertices
             val (upperPoint, lowerPoint) = if (current.y < next.y) {
                 Pair(current, next)
             } else {
                 Pair(next, current)
             }
 
-            // Calculate inverse slope
             val slopeInverse = (next.x - current.x) / (next.y - current.y)
 
-            // Create and add edge to edge table
             val edge = Edge(
-                yMax = lowerPoint.y.toInt(),
+                yMax = yToIndex(lowerPoint.y),
                 xMin = upperPoint.x,
-                slopeInverse = slopeInverse
+                slopeInverse = slopeInverse,
+                color = upperPoint.color,
+                zValue = upperPoint.z
             )
 
-            edgeTable[upperPoint.y.toInt()].add(edge)
+            // Use translated y-coordinate for edge table indexing
+            val yIndex = yToIndex(upperPoint.y)
+            edgeTable[yIndex].add(edge)
+        }
+    }
+
+    private fun fillScanline(yIndex: Int, width: Int) {
+        // Convert back to centered coordinates for actual drawing
+        val centeredY = indexToY(yIndex)
+
+        for (i in 0 until activeEdgeTable.size step 2) {
+            if (i + 1 >= activeEdgeTable.size) break
+
+            val startX = activeEdgeTable[i].xMin.toInt().coerceIn(-width / 2, width / 2)
+            val endX = activeEdgeTable[i + 1].xMin.toInt().coerceIn(-width / 2, width / 2)
+
+            val startZ = activeEdgeTable[i].zValue
+            val endZ = activeEdgeTable[i + 1].zValue
+            val zStep = if (endX != startX) (endZ - startZ) / (endX - startX) else 0f
+
+            var currentZ = startZ
+
+            for (x in startX..endX) {
+                // Convert x to centered coordinates if needed
+//                val centeredX = x - width / 2
+                val bufferIndex = yIndex * width + (x + width / 2)
+
+                if (currentZ > zBuffer[bufferIndex]) {
+                    zBuffer[bufferIndex] = currentZ
+                    pixelBuffer[bufferIndex] = interpolateColors(
+                        activeEdgeTable[i].color,
+                        activeEdgeTable[i + 1].color,
+                        (x - startX).toFloat() / (endX - startX).toFloat()
+                    ).toArgb()
+                }
+
+                currentZ += zStep
+            }
         }
     }
 
@@ -102,26 +140,13 @@ class ScanlinePolygonFiller {
         return edgeTable.indexOfLast { it.isNotEmpty() }
     }
 
-    private fun moveEdgesToAET(y: Int) {
-        activeEdgeTable.addAll(edgeTable[y])
-        edgeTable[y].clear()
+    private fun moveEdgesToAET(yIndex: Int) {
+        activeEdgeTable.addAll(edgeTable[yIndex])
+        edgeTable[yIndex].clear()
     }
 
-    private fun removeEdgesFromAET(y: Int) {
-        activeEdgeTable.removeAll { it.yMax == y }
-    }
-
-    private fun fillScanline(y: Int, pixelBuffer: IntArray, width: Int) {
-        for (i in 0 until activeEdgeTable.size step 2) {
-            if (i + 1 >= activeEdgeTable.size) break
-
-            val startX = activeEdgeTable[i].xMin.toInt().coerceIn(0, width - 1)
-            val endX = activeEdgeTable[i + 1].xMin.toInt().coerceIn(0, width - 1)
-
-            for (x in startX..endX) {
-                pixelBuffer[y * width + x] = 0xFF000000.toInt() // Black color
-            }
-        }
+    private fun removeEdgesFromAET(yIndex: Int) {
+        activeEdgeTable.removeAll { it.yMax == yIndex }
     }
 
     private fun updateAETEdges() {
@@ -130,15 +155,12 @@ class ScanlinePolygonFiller {
         }
     }
 
-    companion object {
-        /**
-         * Helper function to create a polygon from a list of x,y coordinates
-         */
-        fun createPolygon(vararg coordinates: Float): List<Point> {
-            require(coordinates.size % 2 == 0) { "Coordinates must be pairs of x,y values" }
-            return coordinates.toList()
-                .chunked(2)
-                .map { Point(it[0], it[1]) }
-        }
+    private fun interpolateColors(c1: Color, c2: Color, t: Float): Color {
+        return Color(
+            red = c1.red * (1 - t) + c2.red * t,
+            green = c1.green * (1 - t) + c2.green * t,
+            blue = c1.blue * (1 - t) + c2.blue * t,
+            alpha = c1.alpha * (1 - t) + c2.alpha * t
+        )
     }
 }
