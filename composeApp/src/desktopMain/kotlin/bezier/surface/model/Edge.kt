@@ -5,5 +5,8 @@ data class Edge(
     var xMin: Float,
     var slopeInverse: Float,
     var normal: Point3D,  // Normal vector for lighting calculation
-    var zValue: Float
+    var zValue: Float,
+    // Adding fields needed for proper sorting
+    var currentX: Float,
+    var startY: Int
 )
