@@ -5,7 +5,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import bezier.surface.model.LightingParameters
 import bezier.surface.model.Mesh
+import bezier.surface.model.Point2D
 import bezier.surface.model.Point3D
 import bezier.surface.model.Triangle
 import bezier.surface.model.Triangle2D
@@ -37,16 +39,51 @@ class BezierSurfaceViewModel {
         val scale = 200.0
         val perspectiveZ = 1.0 + rotatedVertex.point.z * 0.2
 
-        val centerX = canvasWidth / 2
-        val centerY = canvasHeight / 2
-
         val screenX = ((rotatedVertex.point.x / perspectiveZ) * scale).toFloat()
         val screenY = ((rotatedVertex.point.y / perspectiveZ) * scale).toFloat()
         val screenZ = rotatedVertex.point.z.toFloat()
 
-        val color = adjustColor(fillColor, rotatedVertex.normal)
+        // Transform the normal vector
+        val normal = Point3D(
+            rotatedVertex.normal.x,
+            rotatedVertex.normal.y,
+            rotatedVertex.normal.z
+        )
 
-        return Point2D(screenX, screenY, screenZ, color)
+        return Point2D(
+            x = screenX,
+            y = screenY,
+            z = screenZ,
+            normal = normal
+        )
+    }
+
+    // You'll also need this helper function to transform the vertex normal
+    private fun transformNormal(normal: Point3D, rotationX: Double, rotationZ: Double): Point3D {
+        val cosX = cos(rotationX)
+        val sinX = sin(rotationX)
+        val cosZ = cos(rotationZ)
+        val sinZ = sin(rotationZ)
+
+        // Apply X rotation
+        val afterX = Point3D(
+            x = normal.x,
+            y = normal.y * cosX - normal.z * sinX,
+            z = normal.y * sinX + normal.z * cosX
+        )
+
+        // Apply Z rotation
+        val afterZ = Point3D(
+            x = afterX.x * cosZ - afterX.y * sinZ,
+            y = afterX.x * sinZ + afterX.y * cosZ,
+            z = afterX.z
+        )
+
+        return Point3D(
+            x = afterZ.x,
+            y = afterZ.y,
+            z = afterZ.z
+        )
     }
 
     private val controlPoints = Array(4) { i ->
@@ -257,7 +294,8 @@ class BezierSurfaceViewModel {
 
         with(drawScope) {
             if (showFilled) {
-                val filler = ScanlinePolygonFiller(width, height, zBuffer, pixelBuffer)
+                val light = LightingParameters(kd.toDouble(), ks.toDouble(), m.toDouble(), Point3D(0.0, 0.0, 1.0), Point3D(0.0, 0.0, 1.0), fillColor)
+                val filler = ScanlinePolygonFiller(width, height, zBuffer, pixelBuffer, light)
 
                 mesh?.triangles?.forEach { triangle ->
                     val points = listOf(

@@ -23,6 +23,15 @@ data class Point3D(
         }
     }
 
+    fun normalize(): Point3D {
+        val length = kotlin.math.sqrt(x * x + y * y + z * z)
+        return Point3D(x / length, y / length, z / length)
+    }
+
+    fun dot(other: Point3D): Double {
+        return x * other.x + y * other.y + z * other.z
+    }
+
     // Function to calculate the cross product of two points
     infix fun cross(v2: Point3D): Point3D {
         val x = y * v2.z - z * v2.y
