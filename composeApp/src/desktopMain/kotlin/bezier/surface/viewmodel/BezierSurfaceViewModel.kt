@@ -44,45 +44,13 @@ class BezierSurfaceViewModel {
         val screenZ = rotatedVertex.point.z.toFloat()
 
         // Transform the normal vector
-        val normal = Point3D(
-            rotatedVertex.normal.x,
-            rotatedVertex.normal.y,
-            rotatedVertex.normal.z
-        )
+        val normal = rotatedVertex.normal
 
         return Point2D(
             x = screenX,
             y = screenY,
             z = screenZ,
             normal = normal
-        )
-    }
-
-    // You'll also need this helper function to transform the vertex normal
-    private fun transformNormal(normal: Point3D, rotationX: Double, rotationZ: Double): Point3D {
-        val cosX = cos(rotationX)
-        val sinX = sin(rotationX)
-        val cosZ = cos(rotationZ)
-        val sinZ = sin(rotationZ)
-
-        // Apply X rotation
-        val afterX = Point3D(
-            x = normal.x,
-            y = normal.y * cosX - normal.z * sinX,
-            z = normal.y * sinX + normal.z * cosX
-        )
-
-        // Apply Z rotation
-        val afterZ = Point3D(
-            x = afterX.x * cosZ - afterX.y * sinZ,
-            y = afterX.x * sinZ + afterX.y * cosZ,
-            z = afterX.z
-        )
-
-        return Point3D(
-            x = afterZ.x,
-            y = afterZ.y,
-            z = afterZ.z
         )
     }
 

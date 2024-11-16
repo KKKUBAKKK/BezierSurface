@@ -41,11 +41,7 @@ class ScanlinePolygonFiller {
         return (y + yOffset).toInt().coerceIn(0, height - 1)
     }
 
-    private fun indexToY(index: Int): Float {
-        return (index - yOffset).toFloat()
-    }
-
-    // Lighting calculation remains the same
+    // Lighting calculation remains the same as before
     private fun calculateLighting(normal: Point3D, position: Point3D): Color {
         val N = normal.normalize()
         val L = lightingParams.lightDirection.normalize()
@@ -71,96 +67,119 @@ class ScanlinePolygonFiller {
         )
     }
 
+    // TODO: something is wrong here with the points coordinates (they come in good, come out bad)
     fun fillPolygon(points: List<Point2D>, width: Int, height: Int) {
         if (points.size < 3) return
 
-        // Sort vertices by y-coordinate (for surnames L-Z)
-        val sortedPoints = points.sortedBy { it.y }
+        buildEdgeTable(points)
 
-        buildEdgeTable(sortedPoints)
+        var scanline = findFirstScanline()
+        val lastScanline = findLastScanline()
 
-        var yIndex = findFirstScanline()
-        val lastYIndex = findLastScanline()
+        while (scanline <= lastScanline) {
+            // Add new edges to AET
+            activeEdgeTable.addAll(edgeTable[scanline])
+            edgeTable[scanline].clear()
 
-        while (yIndex <= lastYIndex) {
-            moveEdgesToAET(yIndex)
+            // Remove edges that end at current scanline
+            activeEdgeTable.removeAll { it.yMax == scanline }
 
-            // Sort active edges by x coordinate (for surnames A-K)
-            activeEdgeTable.sortBy { it.currentX }
+            // Bucket sort edges by x coordinate
+            if (activeEdgeTable.size >= 2) {
+                bucketSortEdges()
+                fillScanline(scanline, width)
+            }
 
-            fillScanline(yIndex, width)
-            removeEdgesFromAET(yIndex)
-            yIndex++
-            updateAETEdges()
+            // Update x coordinates for next scanline
+            for (edge in activeEdgeTable) {
+                edge.x += edge.slopeInverse
+            }
+
+            scanline++
+        }
+    }
+
+    private fun bucketSortEdges() {
+        // Simple bucket sort implementation for edges based on x coordinate
+        val min = activeEdgeTable.minByOrNull { it.x }?.x ?: return
+        val max = activeEdgeTable.maxByOrNull { it.x }?.x ?: return
+
+        if (max == min) return
+
+        val bucketCount = activeEdgeTable.size
+        val bucketSize = (max - min) / bucketCount + 1
+        val buckets = Array(bucketCount) { mutableListOf<Edge>() }
+
+        // Distribute edges to buckets
+        for (edge in activeEdgeTable) {
+            val index = ((edge.x - min) / bucketSize).toInt().coerceIn(0, bucketCount - 1)
+            buckets[index].add(edge)
+        }
+
+        // Collect edges back in sorted order
+        activeEdgeTable.clear()
+        for (bucket in buckets) {
+            if (bucket.isNotEmpty()) {
+                bucket.sortBy { it.x }
+                activeEdgeTable.addAll(bucket)
+            }
         }
     }
 
     private fun buildEdgeTable(points: List<Point2D>) {
         for (i in points.indices) {
-            val current = points[i]
-            val next = points[(i + 1) % points.size]
+            val start = points[i]
+            val end = points[(i + 1) % points.size]
 
             // Skip horizontal edges
-            if (current.y == next.y) continue
+            if (yToIndex(start.y) == yToIndex(end.y)) continue
 
-            val (upperPoint, lowerPoint) = if (current.y < next.y) {
-                Pair(current, next)
-            } else {
-                Pair(next, current)
-            }
+            // Determine upper and lower points
+            val (upper, lower) = if (start.y > end.y) Pair(start, end) else Pair(end, start)
 
-            val dx = next.x - current.x
-            val dy = next.y - current.y
-            val slopeInverse = dx / dy
+            val slopeInverse = (end.x - start.x) / (end.y - start.y)
 
-            val startY = yToIndex(upperPoint.y)
             val edge = Edge(
-                yMax = yToIndex(lowerPoint.y),
-                xMin = upperPoint.x,
+                yMax = yToIndex(lower.y),
+                x = upper.x,
                 slopeInverse = slopeInverse,
-                normal = upperPoint.normal,
-                zValue = upperPoint.z,
-                currentX = upperPoint.x,
-                startY = startY
+                normal = upper.normal,
+                zValue = upper.z
             )
 
-            edgeTable[startY].add(edge)
+            val yStart = yToIndex(upper.y)
+            edgeTable[yStart].add(edge)
         }
     }
 
-    private fun fillScanline(yIndex: Int, width: Int) {
-        val centeredY = indexToY(yIndex)
-
-        for (i in 0 until activeEdgeTable.size step 2) {
-            if (i + 1 >= activeEdgeTable.size) break
-
+    private fun fillScanline(scanline: Int, width: Int) {
+        for (i in 0 until activeEdgeTable.size - 1 step 2) {
             val leftEdge = activeEdgeTable[i]
             val rightEdge = activeEdgeTable[i + 1]
 
-            val startX = leftEdge.currentX.toInt().coerceIn(-width / 2, width / 2)
-            val endX = rightEdge.currentX.toInt().coerceIn(-width / 2, width / 2)
+            val xStart = (leftEdge.x).toInt().coerceIn(-width/2, width/2)
+            val xEnd = (rightEdge.x).toInt().coerceIn(-width/2, width/2)
 
-            // Calculate z interpolation
-            val dx = endX - startX
-            val startZ = leftEdge.zValue
-            val endZ = rightEdge.zValue
-            val zStep = if (dx != 0) (endZ - startZ) / dx else 0f
+            val zStep = if (xEnd != xStart)
+                (rightEdge.zValue - leftEdge.zValue) / (xEnd - xStart)
+            else
+                0f
 
-            var currentZ = startZ
+            var currentZ = leftEdge.zValue
 
-            for (x in startX..endX) {
-                val bufferIndex = yIndex * width + (x + width / 2)
+            for (x in xStart..xEnd) {
+                val bufferIndex = scanline * width + (x + width/2)
 
-                if (currentZ > zBuffer[bufferIndex]) {
-                    // Interpolate normal
-                    val t = if (dx != 0) (x - startX).toFloat() / dx else 0f
+                if (bufferIndex >= 0 && bufferIndex < zBuffer.size && currentZ > zBuffer[bufferIndex]) {
+                    val t = if (xEnd != xStart) (x - xStart).toFloat() / (xEnd - xStart) else 0f
+
                     val interpolatedNormal = Point3D(
                         leftEdge.normal.x * (1 - t) + rightEdge.normal.x * t,
                         leftEdge.normal.y * (1 - t) + rightEdge.normal.y * t,
                         leftEdge.normal.z * (1 - t) + rightEdge.normal.z * t
                     ).normalize()
 
-                    val position = Point3D(x.toDouble(), centeredY.toDouble(), currentZ.toDouble())
+                    val position = Point3D(x.toDouble(), scanline.toDouble(), currentZ.toDouble())
                     val color = calculateLighting(interpolatedNormal, position)
 
                     zBuffer[bufferIndex] = currentZ
@@ -173,21 +192,5 @@ class ScanlinePolygonFiller {
     }
 
     private fun findFirstScanline(): Int = edgeTable.indexOfFirst { it.isNotEmpty() }
-
     private fun findLastScanline(): Int = edgeTable.indexOfLast { it.isNotEmpty() }
-
-    private fun moveEdgesToAET(yIndex: Int) {
-        activeEdgeTable.addAll(edgeTable[yIndex])
-        edgeTable[yIndex].clear()
-    }
-
-    private fun removeEdgesFromAET(yIndex: Int) {
-        activeEdgeTable.removeAll { it.yMax == yIndex }
-    }
-
-    private fun updateAETEdges() {
-        for (edge in activeEdgeTable) {
-            edge.currentX += edge.slopeInverse
-        }
-    }
 }
