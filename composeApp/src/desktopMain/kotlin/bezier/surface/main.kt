@@ -13,7 +13,7 @@ fun main() = application {
         title = "Bezier Surface Viewer",
         resizable = true
     ) {
-        this.window.setSize(1600, 1200)
+        this.window.setSize(3200, 2400)
         MaterialTheme {
             Surface(color = Color.DarkGray) {
                 BezierSurfaceViewer()

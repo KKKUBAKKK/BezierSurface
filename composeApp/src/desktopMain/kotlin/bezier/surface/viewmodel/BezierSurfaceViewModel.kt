@@ -36,6 +36,19 @@ class BezierSurfaceViewModel {
     private var pixelBuffer by mutableStateOf(Array(width) { IntArray(height) })
     private var zBuffer = FloatArray(width * height) { Float.NEGATIVE_INFINITY }
 
+    private var currentTime by mutableStateOf(0f)
+    private val spiralRadius = 100.0  // Adjust this to control how wide the spiral is
+    private val spiralHeight = 10.0   // Fixed height of the light
+    private val rotationSpeed = 0.1f // Adjust to control animation speed
+    private val spiralTightness = 0.5 // Adjust to control how tight the spiral is
+
+    // Add this function to calculate light position based on time
+    private fun calculateLightPosition(): Point3D {
+        val x = spiralRadius * cos(currentTime.toDouble()) * (1.0 - spiralTightness * cos(currentTime.toDouble()))
+        val y = spiralRadius * sin(currentTime.toDouble()) * (1.0 - spiralTightness * cos(currentTime.toDouble()))
+        return Point3D(x, y, spiralHeight)
+    }
+
     private fun transformToScreen(vertex: Vertex, canvasWidth: Float, canvasHeight: Float): Point2D {
         val rotatedVertex = transformVertex(vertex, mesh?.rotationX ?: 0.0, mesh?.rotationZ ?: 0.0)
         val scale = 150.0
@@ -253,6 +266,12 @@ class BezierSurfaceViewModel {
 //    }
 
     fun drawSurface(drawScope: DrawScope, width: Int, height: Int) {
+        // Update time
+        currentTime += rotationSpeed
+
+        // Calculate new light position
+        val lightPosition = calculateLightPosition()
+
         if (mesh == null || mesh?.canvasWidth != width || mesh?.canvasHeight != height ||
             mesh?.rotationX != rotationX.toDouble() || mesh?.rotationZ != rotationZ.toDouble()) {
             mesh = generateMesh(resolution)
@@ -267,7 +286,7 @@ class BezierSurfaceViewModel {
             if (showFilled) {
 //                val light = LightingParameters(kd.toDouble(), ks.toDouble(), m.toDouble(), Point3D(0.0, 0.0, 1.0), Point3D(0.0, 0.0, 1.0), fillColor)
 //                val filler = ScanlinePolygonFiller(width, height, zBuffer, pixelBuffer, light)
-                val phong = PhongParameters(kd.toDouble(), ks.toDouble(), m.toDouble(), Color.White, Color.Magenta, Point3D(0.0, 0.0, 50.0))
+                val phong = PhongParameters(kd.toDouble(), ks.toDouble(), m.toDouble(), Color.White, Color.Magenta, lightPosition)
                 val polygonFiller = PolygonFiller(width, height, pixelBuffer, phong)
 
                 mesh?.triangles?.forEach { triangle ->

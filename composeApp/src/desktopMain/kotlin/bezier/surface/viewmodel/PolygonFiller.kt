@@ -2,6 +2,7 @@ package bezier.surface.viewmodel
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import bezier.surface.model.Edge
 import bezier.surface.model.PhongParameters
 import bezier.surface.model.Point2D
 import bezier.surface.model.Point3D
@@ -13,15 +14,15 @@ import kotlin.math.pow
 
 //import bezier.surface.model.Edge
 
-data class Edge(
-    val yMaxIdx: Int,
-    val yMax: Double,
-    var yIdx: Int,
-    var y: Double,
-    var xIdx: Int,
-    var x: Double,
-    val slope: Double,
-)
+//data class Edge(
+//    val yMaxIdx: Int,
+//    val yMax: Double,
+//    var yIdx: Int,
+//    var y: Double,
+//    var xIdx: Int,
+//    var x: Double,
+//    val slope: Double,
+//)
 
 class PolygonFiller(
     private var width: Int,
@@ -107,15 +108,7 @@ class PolygonFiller(
             val y = left.yIdx;
             val xStart = left.xIdx;
             val xEnd = right.xIdx;
-            for (x in xStart .. xEnd) {
-                if (triangle == null) {
-                    pixelBuffer[x][y] = Color.Magenta.toArgb()
-                } else {
-                    val point = Point2D((x - xOffset).toDouble(), (y - yOffset).toDouble())
-                    val color = calculatePixelColor(point, triangle!!, phongParameters)
-                    pixelBuffer[x][y] = color.toArgb()
-                }
-            }
+            fillScanLine(xStart, xEnd, y)
         }
     }
 

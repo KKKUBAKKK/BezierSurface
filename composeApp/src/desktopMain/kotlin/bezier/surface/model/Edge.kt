@@ -1,9 +1,11 @@
 package bezier.surface.model
 
 data class Edge(
-    var yMax: Int,
-    var x: Float,  // current x position
-    var slopeInverse: Float,
-    var normal: Point3D,
-    var zValue: Float
+    val yMaxIdx: Int,
+    val yMax: Double,
+    var yIdx: Int,
+    var y: Double,
+    var xIdx: Int,
+    var x: Double,
+    val slope: Double,
 )
