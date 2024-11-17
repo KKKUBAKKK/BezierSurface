@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import bezier.surface.model.LightingParameters
 import bezier.surface.model.Mesh
+import bezier.surface.model.PhongParameters
 import bezier.surface.model.Point2D
 import bezier.surface.model.Point3D
 import bezier.surface.model.Triangle
@@ -40,9 +41,9 @@ class BezierSurfaceViewModel {
         val scale = 150.0
         val perspectiveZ = 1.0 + rotatedVertex.point.z * 0.2
 
-        val screenX = ((rotatedVertex.point.x / perspectiveZ) * scale).toFloat()
-        val screenY = ((rotatedVertex.point.y / perspectiveZ) * scale).toFloat()
-        val screenZ = rotatedVertex.point.z.toFloat()
+        val screenX = ((rotatedVertex.point.x / perspectiveZ) * scale)
+        val screenY = ((rotatedVertex.point.y / perspectiveZ) * scale)
+        val screenZ = rotatedVertex.point.z
 
         // Transform the normal vector
         val normal = rotatedVertex.normal
@@ -141,14 +142,14 @@ class BezierSurfaceViewModel {
         ).normalized()
     }
 
-    private fun transformPoint(vertex: Vertex, canvasWidth: Float, canvasHeight: Float): Offset {
+    private fun transformPoint(vertex: Vertex, canvasWidth: Float, canvasHeight: Float): Point2D {
         val rotatedVertex = transformVertex(vertex, mesh?.rotationX ?: 0.0, mesh?.rotationZ ?: 0.0)
         val scale = 200.0
         val perspectiveZ = 1.0 + rotatedVertex.point.z * 0.2
 
-        return Offset(
-            ((rotatedVertex.point.x / perspectiveZ) * scale).toFloat(),
-            ((rotatedVertex.point.y / perspectiveZ) * scale).toFloat()
+        return Point2D(
+            ((rotatedVertex.point.x / perspectiveZ) * scale),
+            ((rotatedVertex.point.y / perspectiveZ) * scale)
         )
     }
 
@@ -193,10 +194,10 @@ class BezierSurfaceViewModel {
             blue = (color.blue * intensity).toFloat())
     }
 
-    private fun interpolate(y: Float, pA: Offset, pB: Offset): Offset {
+    private fun interpolate(y: Double, pA: Point2D, pB: Point2D): Point2D {
         val t = (y - pA.y) / (pB.y - pA.y)
         val x = pA.x + t * (pB.x - pA.x)
-        return Offset(x, y)
+        return Point2D(x, y)
     }
 
     private fun fillTriangle(triangle: Triangle2D, normal: Point3D, drawScope: DrawScope) {
@@ -204,8 +205,8 @@ class BezierSurfaceViewModel {
         val (top, middle, bottom) = vertices
 
         for (y in top.y.toInt()..<bottom.y.toInt()) {
-            val left = interpolate(y.toFloat(), top, middle)
-            val right = interpolate(y.toFloat(), top, bottom)
+            val left = interpolate(y.toDouble(), top, middle)
+            val right = interpolate(y.toDouble(), top, bottom)
 
             for (x in left.x.toInt()..right.x.toInt()) {
                 val offset = Offset(x.toFloat(), y.toFloat())
@@ -266,7 +267,8 @@ class BezierSurfaceViewModel {
             if (showFilled) {
 //                val light = LightingParameters(kd.toDouble(), ks.toDouble(), m.toDouble(), Point3D(0.0, 0.0, 1.0), Point3D(0.0, 0.0, 1.0), fillColor)
 //                val filler = ScanlinePolygonFiller(width, height, zBuffer, pixelBuffer, light)
-                var polygonFiller = PolygonFiller(width, height, pixelBuffer)
+                val phong = PhongParameters(kd.toDouble(), ks.toDouble(), m.toDouble(), Color.White, Color.Magenta, Point3D(0.0, 0.0, 50.0))
+                val polygonFiller = PolygonFiller(width, height, pixelBuffer, phong)
 
                 mesh?.triangles?.forEach { triangle ->
                     val points = listOf(
@@ -275,7 +277,7 @@ class BezierSurfaceViewModel {
                         transformToScreen(triangle.v3, width.toFloat(), height.toFloat())
                     )
 
-                    polygonFiller.fillPolygon(points)
+                    polygonFiller.fillPolygon(points, Triangle2D(points[0], points[1], points[2]))
 //                    filler.fillPolygon(points, width, height)
                 }
 
@@ -317,9 +319,9 @@ class BezierSurfaceViewModel {
                     val p2 = transformToScreen(triangle.v2, width.toFloat(), height.toFloat())
                     val p3 = transformToScreen(triangle.v3, width.toFloat(), height.toFloat())
 
-                    drawLine(lineColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y))
-                    drawLine(lineColor, Offset(p2.x, p2.y), Offset(p3.x, p3.y))
-                    drawLine(lineColor, Offset(p3.x, p3.y), Offset(p1.x, p1.y))
+                    drawLine(lineColor, Offset(p1.x.toFloat(), p1.y.toFloat()), Offset(p2.x.toFloat(), p2.y.toFloat()))
+                    drawLine(lineColor, Offset(p2.x.toFloat(), p2.y.toFloat()), Offset(p3.x.toFloat(), p3.y.toFloat()))
+                    drawLine(lineColor, Offset(p3.x.toFloat(), p3.y.toFloat()), Offset(p1.x.toFloat(), p1.y.toFloat()))
                 }
             }
         }
