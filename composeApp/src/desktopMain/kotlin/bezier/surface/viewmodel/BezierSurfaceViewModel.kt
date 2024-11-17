@@ -31,12 +31,13 @@ class BezierSurfaceViewModel {
     var width by mutableStateOf(1600)
     var height by mutableStateOf(1200)
 
-    private var pixelBuffer by mutableStateOf(IntArray(width * height))
+//    private var pixelBuffer by mutableStateOf(IntArray(width * height))
+    private var pixelBuffer by mutableStateOf(Array(width) { IntArray(height) })
     private var zBuffer = FloatArray(width * height) { Float.NEGATIVE_INFINITY }
 
     private fun transformToScreen(vertex: Vertex, canvasWidth: Float, canvasHeight: Float): Point2D {
         val rotatedVertex = transformVertex(vertex, mesh?.rotationX ?: 0.0, mesh?.rotationZ ?: 0.0)
-        val scale = 200.0
+        val scale = 150.0
         val perspectiveZ = 1.0 + rotatedVertex.point.z * 0.2
 
         val screenX = ((rotatedVertex.point.x / perspectiveZ) * scale).toFloat()
@@ -258,12 +259,14 @@ class BezierSurfaceViewModel {
 
         // Reset buffers
         zBuffer = FloatArray(width * height) { Float.NEGATIVE_INFINITY }
-        pixelBuffer = IntArray(width * height)
+//        pixelBuffer = IntArray(width * height)
+        pixelBuffer = Array(width) { IntArray(height) }
 
         with(drawScope) {
             if (showFilled) {
-                val light = LightingParameters(kd.toDouble(), ks.toDouble(), m.toDouble(), Point3D(0.0, 0.0, 1.0), Point3D(0.0, 0.0, 1.0), fillColor)
-                val filler = ScanlinePolygonFiller(width, height, zBuffer, pixelBuffer, light)
+//                val light = LightingParameters(kd.toDouble(), ks.toDouble(), m.toDouble(), Point3D(0.0, 0.0, 1.0), Point3D(0.0, 0.0, 1.0), fillColor)
+//                val filler = ScanlinePolygonFiller(width, height, zBuffer, pixelBuffer, light)
+                var polygonFiller = PolygonFiller(width, height, pixelBuffer)
 
                 mesh?.triangles?.forEach { triangle ->
                     val points = listOf(
@@ -272,13 +275,29 @@ class BezierSurfaceViewModel {
                         transformToScreen(triangle.v3, width.toFloat(), height.toFloat())
                     )
 
-                    filler.fillPolygon(points, width, height)
+                    polygonFiller.fillPolygon(points)
+//                    filler.fillPolygon(points, width, height)
                 }
 
-                // Draw the filled polygons from the pixel buffer
+//                // Draw the filled polygons from the pixel buffer
+//                for (y in 0 until height) {
+//                    for (x in 0 until width) {
+//                        val color = Color(pixelBuffer[y * width + x])
+//                        if (color != Color.Transparent) {
+//                            val tx = (x - width / 2).toFloat()
+//                            val ty = (y - height / 2).toFloat()
+//                            drawRect(
+//                                color = color,
+//                                topLeft = Offset(tx, ty),
+//                                size = Size(1f, 1f)
+//                            )
+//                        }
+//                    }
+//                }
+
                 for (y in 0 until height) {
                     for (x in 0 until width) {
-                        val color = Color(pixelBuffer[y * width + x])
+                        val color = Color(pixelBuffer[x][y])
                         if (color != Color.Transparent) {
                             val tx = (x - width / 2).toFloat()
                             val ty = (y - height / 2).toFloat()

@@ -14,7 +14,9 @@ class ScanlinePolygonFiller {
     private val activeEdgeTable = mutableListOf<Edge>()
     private var zBuffer: FloatArray
     private var pixelBuffer: IntArray
+    private var xOffset: Int = 0
     private var yOffset: Int = 0
+    private var width: Int = 0
     private var height: Int = 0
     private lateinit var lightingParams: LightingParameters
 
@@ -27,7 +29,9 @@ class ScanlinePolygonFiller {
     ) {
         this.zBuffer = zBuffer
         this.pixelBuffer = pixelBuffer
+        this.width = width
         this.height = height
+        this.xOffset = width / 2
         this.yOffset = height / 2
         this.lightingParams = lightingParams
         initializeEdgeTable(height)
@@ -74,6 +78,7 @@ class ScanlinePolygonFiller {
         buildEdgeTable(points)
 
         var scanline = findFirstScanline()
+        if (scanline == -1) return
         val lastScanline = findLastScanline()
 
         while (scanline <= lastScanline) {
@@ -81,15 +86,16 @@ class ScanlinePolygonFiller {
             activeEdgeTable.addAll(edgeTable[scanline])
             edgeTable[scanline].clear()
 
-            // Remove edges that end at current scanline
-            activeEdgeTable.removeAll { it.yMax == scanline }
-
             // Bucket sort edges by x coordinate
             if (activeEdgeTable.size >= 2) {
                 bucketSortEdges()
                 fillScanline(scanline, width)
             }
 
+            // Remove edges that end at current scanline
+            activeEdgeTable.removeAll { it.yMax == scanline }
+
+            // TODO: update also normal and z values
             // Update x coordinates for next scanline
             for (edge in activeEdgeTable) {
                 edge.x += edge.slopeInverse
@@ -101,8 +107,11 @@ class ScanlinePolygonFiller {
 
     private fun bucketSortEdges() {
         // Simple bucket sort implementation for edges based on x coordinate
-        val min = activeEdgeTable.minByOrNull { it.x }?.x ?: return
-        val max = activeEdgeTable.maxByOrNull { it.x }?.x ?: return
+        val tmin = activeEdgeTable.minByOrNull { it.x }?.x ?: return
+        val tmax = activeEdgeTable.maxByOrNull { it.x }?.x ?: return
+
+        val min = tmin + xOffset
+        val max = tmax + xOffset
 
         if (max == min) return
 
@@ -112,7 +121,7 @@ class ScanlinePolygonFiller {
 
         // Distribute edges to buckets
         for (edge in activeEdgeTable) {
-            val index = ((edge.x - min) / bucketSize).toInt().coerceIn(0, bucketCount - 1)
+            val index = (((edge.x + xOffset) - min) / bucketSize).toInt().coerceIn(0, bucketCount - 1)
             buckets[index].add(edge)
         }
 
@@ -120,7 +129,7 @@ class ScanlinePolygonFiller {
         activeEdgeTable.clear()
         for (bucket in buckets) {
             if (bucket.isNotEmpty()) {
-                bucket.sortBy { it.x }
+//                bucket.sortBy { it.x } // chyba niepotraebne
                 activeEdgeTable.addAll(bucket)
             }
         }
@@ -137,17 +146,17 @@ class ScanlinePolygonFiller {
             // Determine upper and lower points
             val (upper, lower) = if (start.y > end.y) Pair(start, end) else Pair(end, start)
 
-            val slopeInverse = (end.x - start.x) / (end.y - start.y)
+            val slopeInverse = (upper.x - lower.x) / (upper.y - lower.y)
 
             val edge = Edge(
-                yMax = yToIndex(lower.y),
-                x = upper.x,
+                yMax = yToIndex(upper.y),
+                x = lower.x,
                 slopeInverse = slopeInverse,
-                normal = upper.normal,
-                zValue = upper.z
+                normal = lower.normal,
+                zValue = lower.z
             )
 
-            val yStart = yToIndex(upper.y)
+            val yStart = yToIndex(lower.y)
             edgeTable[yStart].add(edge)
         }
     }
@@ -179,7 +188,7 @@ class ScanlinePolygonFiller {
                         leftEdge.normal.z * (1 - t) + rightEdge.normal.z * t
                     ).normalize()
 
-                    val position = Point3D(x.toDouble(), scanline.toDouble(), currentZ.toDouble())
+                    val position = Point3D(x.toDouble(), (scanline - yOffset).toDouble(), currentZ.toDouble())
                     val color = calculateLighting(interpolatedNormal, position)
 
                     zBuffer[bufferIndex] = currentZ
