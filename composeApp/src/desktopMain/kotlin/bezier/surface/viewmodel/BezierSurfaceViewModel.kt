@@ -18,7 +18,7 @@ import kotlin.math.pow
 import kotlin.math.sin
 
 class BezierSurfaceViewModel (
-    val pathToPoints: String = "/Users/jakubkindracki/AndroidStudioProjects/BezierSurface/composeApp/src/desktopMain/resources/control_points.txt",
+    val pathToPoints: String = "src/Resources/control_points/control_points.txt",
 ) {
     // Display mode parameters
     var showWireframe by mutableStateOf(true)
@@ -28,20 +28,20 @@ class BezierSurfaceViewModel (
     var scale = 50.0
 
     // Surface parameters
-    var rotationXBeta by mutableStateOf(0f)
-    var rotationZAlpha by mutableStateOf(0f)
+    var rotationXBeta by mutableStateOf(3.14f / 2)
+    var rotationZAlpha by mutableStateOf(3.14f / 2)
     var resolution by mutableStateOf(3)
 
     // Light parameters
     var lightMove  by mutableStateOf(false)
-    var lightPosition by mutableStateOf(Point3D(0.0, 0.0, 10.0))
+    var lightPosition by mutableStateOf(Point3D(0.0, 0.0, 2.5))
     var lightColor by mutableStateOf(Point3D(1.0, 1.0, 1.0))
-    var kd by mutableStateOf(0.5f)
+    var kd by mutableStateOf(0.05f)
     var ks by mutableStateOf(0.5f)
     var m by mutableStateOf(10f)
     private var currentTime by mutableStateOf(0f)
     private val spiralRadius = 5.0  // Adjust this to control how wide the spiral is
-    private val spiralHeight = 10.0   // Fixed height of the light
+    private val spiralHeight = 2.5   // Fixed height of the light
     private val rotationSpeed = 0.1f // Adjust to control animation speed
 //    private val spiralTightness = 0.5 // Adjust to control how tight the spiral is
 
@@ -153,13 +153,12 @@ class BezierSurfaceViewModel (
         return point
     }
 
-    // TODO: chyba jakos zle sie obliczaja
     private fun calculatePu(u: Double, v: Double): Point3D {
         var pu = Point3D.Zero()
-        val n = 3  // degree of the surface
 
-        for (i in 0..3) {
+        for (i in 0..2) {
             for (j in 0..3) {
+
                 val basisV = bernstein(j, 3, v)
                 // Calculate the derivative of the Bernstein polynomial with respect to u
                 val basisUPrime = if (i == 0) {
@@ -181,7 +180,6 @@ class BezierSurfaceViewModel (
 
     private fun calculatePv(u: Double, v: Double): Point3D {
         var pv = Point3D.Zero()
-        val m = 3  // degree of the surface
 
         for (i in 0..3) {
             for (j in 0..3) {
@@ -353,7 +351,7 @@ class BezierSurfaceViewModel (
                 val polygonFiller = PolygonFiller(width, height, pixelBuffer, phong, isTexture, texture)
 
                 rotatedTriangles?.forEach {
-                    polygonFiller.fillPolygon(it)
+                    polygonFiller.fillPolygon(it, scale)
                 }
 
                 for (y in 0 until height) {

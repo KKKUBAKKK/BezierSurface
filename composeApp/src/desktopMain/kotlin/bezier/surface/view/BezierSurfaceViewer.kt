@@ -95,35 +95,27 @@ fun BezierSurfaceViewer() {
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-//                Button(
-//                    onClick = {
-//                        val path = openFileDialog("src/Resources/control_points")
-//                    },
-//                    modifier = Modifier.weight(1f),
-//                    colors = ButtonDefaults.buttonColors(backgroundColor = Color.White)
-//                ) {
-//                    Text("Choose control points", fontSize = 10.sp)
-//                }
 
                 Button(
                     onClick = {
-                        viewModel.newMapping(openFileDialog("src/Resources/normal_maps"))
-//                    viewModel.updateNormalMapping(true, openFileDialog("src/normal-maps"))
+                        if (viewModel.showFilled)
+                            viewModel.newMapping(openFileDialog("src/Resources/normal_maps"))
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(backgroundColor = Color.White)
                 ) {
-                    Text("Choose normal map", fontSize = 10.sp)
+                    Text("Choose normal map", fontSize = 12.sp)
                 }
 
                 Button(
                     onClick = {
-                    viewModel.newTexture(openFileDialog("src/Resources/textures"))
+                        if (viewModel.showFilled)
+                            viewModel.newTexture(openFileDialog("src/Resources/textures"))
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(backgroundColor = Color.White)
                 ) {
-                    Text("Choose texture", fontSize = 10.sp)
+                    Text("Choose texture", fontSize = 12.sp)
                 }
             }
 
@@ -132,7 +124,7 @@ fun BezierSurfaceViewer() {
             Slider(
                 value = viewModel.rotationZAlpha,
                 onValueChange = { viewModel.rotationZAlpha = it },
-                valueRange = -3.14f..3.14f,
+                valueRange = 0f..3.14f,
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
 
@@ -140,7 +132,7 @@ fun BezierSurfaceViewer() {
             Slider(
                 value = viewModel.rotationXBeta,
                 onValueChange = { viewModel.rotationXBeta = it },
-                valueRange = -3.14f..3.14f,
+                valueRange = 0f..3.14f,
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
 
@@ -150,7 +142,7 @@ fun BezierSurfaceViewer() {
                 value = viewModel.resolution.toFloat(),
                 onValueChange = { viewModel.resolution = it.toInt() },
                 valueRange = 3f..50f,
-                steps = 25,
+                steps = 20,
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
 
@@ -159,7 +151,7 @@ fun BezierSurfaceViewer() {
             Slider(
                 value = viewModel.kd,
                 onValueChange = { viewModel.kd = it },
-                valueRange = 0f..1f,
+                valueRange = 0f..0.1f,
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
 

@@ -7,6 +7,7 @@ data class Point3D(
 ) {
     operator fun plus(other: Point3D) = Point3D(x + other.x, y + other.y, z + other.z)
     operator fun times(scalar: Double) = Point3D(x * scalar, y * scalar, z * scalar)
+    operator fun times(other: Point3D) = Point3D(x * other.x, y * other.y, z * other.z)
     operator fun minus(other: Point3D) = Point3D(x - other.x, y - other.y, z - other.z)
     operator fun div(scalar: Double) = Point3D(x / scalar, y / scalar, z / scalar)
 

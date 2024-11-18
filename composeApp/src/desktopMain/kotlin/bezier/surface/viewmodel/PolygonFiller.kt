@@ -19,6 +19,7 @@ import kotlin.math.pow
 //)
 
 class PolygonFiller(
+
     // Canvas size
     private var width: Int,
     private var height: Int,
@@ -180,7 +181,6 @@ class PolygonFiller(
         return pixelBuffer
     }
 
-    // Lighting experiments ------------------------------------------------------------------------
     fun calculatePhongLighting(
         x: Float,
         y: Float,
@@ -200,7 +200,7 @@ class PolygonFiller(
         val L = (params.lightPosition - point).normalize()
 
         // View vector is [0, 0, 1] normalized
-        val V = Point3D(0.0, 0.0, -5.0).normalize()
+        val V = Point3D(0.0, 0.0, 1.0).normalize()
 
         // Calculate reflection vector (R)
         val NdotL = N.dot(L)
@@ -243,18 +243,14 @@ class PolygonFiller(
         return color
     }
 
-    // TODO: DO ZMIANY
     private fun interpolatePoint(
         x: Float,
         y: Float,
         vertices: List<Point3D>,
         triangle: Triangle
     ): Point3D {
-        val v0 = vertices[0]
-        val v1 = vertices[1]
-        val v2 = vertices[2]
 
-        val b = barycentric(x, y, v0, v1, v2)
+        val b = barycentric(x, y, vertices[0], vertices[1], vertices[2])
 
         val p0 = triangle.v1.point
         val p1 = triangle.v2.point
@@ -302,7 +298,7 @@ class PolygonFiller(
         return res
     }
 
-    fun interpolateNormal(
+    private fun interpolateNormal(
         point: Point3D,
         triangle: Triangle
     ): Point3D {
