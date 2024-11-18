@@ -6,11 +6,11 @@ import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bezier.surface.viewmodel.BezierSurfaceViewModel
-import org.jetbrains.skia.Bitmap
 
 @Composable
 fun BezierSurfaceViewer() {
@@ -26,9 +26,9 @@ fun BezierSurfaceViewer() {
             .fillMaxHeight()
             .padding(end = 16.dp),
         ) {
-            this.translate(this.size.width / 2, this.size.height / 2) {
+//            this.translate(this.size.width / 2, this.size.height / 2) {
                 viewModel.drawSurface(this, width = this.size.width.toInt(), height = this.size.height.toInt())
-            }
+//            }
         }
 
         // Controls
@@ -78,16 +78,16 @@ fun BezierSurfaceViewer() {
             // Rotation controls
             Text("Alpha", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
             Slider(
-                value = viewModel.rotationZ,
-                onValueChange = { viewModel.rotationZ = it },
+                value = viewModel.rotationZAlpha,
+                onValueChange = { viewModel.rotationZAlpha = it },
                 valueRange = -3.14f..3.14f,
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
 
             Text("Beta", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
             Slider(
-                value = viewModel.rotationX,
-                onValueChange = { viewModel.rotationX = it },
+                value = viewModel.rotationXBeta,
+                onValueChange = { viewModel.rotationXBeta = it },
                 valueRange = -3.14f..3.14f,
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
@@ -129,12 +129,14 @@ fun BezierSurfaceViewer() {
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
 
-            // Color picker
-            Text("Light Color", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-            ColorPickerControl(
-                initialColor = viewModel.lightColor,
-                onColorSelected = { viewModel.lightColor = it }
-            )
+//            // Color picker
+//            Text("Light Color", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+//            ColorPickerControl(
+//                initialColor = Color((viewModel.lightColor.x * 255).toFloat(),
+//                    (viewModel.lightColor.y * 255).toFloat(),
+//                    (viewModel.lightColor.z * 255).toFloat())
+//                onColorSelected = { viewModel.lightColor = it }
+//            )
         }
     }
 }
