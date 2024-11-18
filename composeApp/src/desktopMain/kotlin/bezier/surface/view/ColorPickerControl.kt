@@ -9,17 +9,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import bezier.surface.model.Point3D
 
 
 @Composable
 fun ColorPickerControl(
-    initialColor: Color,
-    onColorSelected: (Color) -> Unit
+    initialColor: Point3D,
+    onColorSelected: (Point3D) -> Unit
 ) {
     // Separate red, green, and blue color components
-    var red by remember { mutableStateOf((initialColor.red * 255).toInt()) }
-    var green by remember { mutableStateOf((initialColor.green * 255).toInt()) }
-    var blue by remember { mutableStateOf((initialColor.blue * 255).toInt()) }
+    var red by remember { mutableStateOf(initialColor.x) }
+    var green by remember { mutableStateOf(initialColor.y) }
+    var blue by remember { mutableStateOf(initialColor.z) }
 
     Column(modifier = Modifier.padding(16.dp)) {
         // Display color preview
@@ -27,7 +28,7 @@ fun ColorPickerControl(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
-                .background(Color(red / 255f, green / 255f, blue / 255f))
+                .background(Color(red.toFloat(), green.toFloat(), blue.toFloat()))
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -37,10 +38,10 @@ fun ColorPickerControl(
         Slider(
             value = red.toFloat(),
             onValueChange = {
-                red = it.toInt()
-                onColorSelected(Color(red / 255f, green / 255f, blue / 255f))
+                red = it.toDouble()
+                onColorSelected(Point3D(red, green, blue))
             },
-            valueRange = 0f..255f,
+            valueRange = 0f..1f,
 //            colors = SliderDefaults.colors(
 //                thumbColor = Color.Red,
 //                activeTrackColor = Color.Red
@@ -52,10 +53,10 @@ fun ColorPickerControl(
         Slider(
             value = green.toFloat(),
             onValueChange = {
-                green = it.toInt()
-                onColorSelected(Color(red / 255f, green / 255f, blue / 255f))
+                green = it.toDouble()
+                onColorSelected(Point3D(red, green, blue))
             },
-            valueRange = 0f..255f,
+            valueRange = 0f..1f,
 //            colors = SliderDefaults.colors(
 //                thumbColor = Color.Green,
 //                activeTrackColor = Color.Green
@@ -67,10 +68,10 @@ fun ColorPickerControl(
         Slider(
             value = blue.toFloat(),
             onValueChange = {
-                blue = it.toInt()
-                onColorSelected(Color(red / 255f, green / 255f, blue / 255f))
+                blue = it.toDouble()
+                onColorSelected(Point3D(red, green, blue))
             },
-            valueRange = 0f..255f,
+            valueRange = 0f..1f,
 //            colors = SliderDefaults.colors(
 //                thumbColor = Color.Blue,
 //                activeTrackColor = Color.Blue

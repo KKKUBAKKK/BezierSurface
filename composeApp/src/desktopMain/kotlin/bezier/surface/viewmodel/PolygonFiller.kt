@@ -27,7 +27,11 @@ class PolygonFiller(
     private var pixelBuffer: Array<IntArray>,
 
     // Phong parameters for lighting calculations
-    private var phongParameters: PhongParameters
+    private var phongParameters: PhongParameters,
+
+    // Texture params
+    isTexture: Boolean = false,
+    texture: Array<Array<Color>>? = null
 ) {
     // Edge table and active edge table for scan line algorithm
     private lateinit var ET: Array<MutableList<Edge>>
@@ -41,6 +45,10 @@ class PolygonFiller(
     // Triangle before changing and vertices after
     private var triangle: Triangle? = null
     private lateinit var vertices: List<Point3D>
+
+    // Texture params
+    private var isTexture = isTexture
+    private var texture = texture
 
     // Initialize edge table
     init {
@@ -113,8 +121,7 @@ class PolygonFiller(
     // Filling the line with color
     private fun fillScanLine(xStart: Int, xEnd: Int, y: Int) {
         for (x in xStart..xEnd) {
-            val point = interpolateBarycentric(x.toFloat(), y.toFloat(), vertices, triangle!!)
-            val color = calculatePhongLighting(point, phongParameters)
+            val color = calculatePhongLighting(x.toFloat(), y.toFloat(), vertices, triangle!!, phongParameters)
             pixelBuffer[x][y] = color.toArgb()
         }
     }
@@ -125,12 +132,11 @@ class PolygonFiller(
     }
 
     // Filling given triangle with color
-    fun fillPolygon(triangle: Triangle): Array<IntArray> {
+    fun fillPolygon(triangle: Triangle, scale: Double = 50.0): Array<IntArray> {
         // Setting the triangle
         this.triangle = triangle
 
         // Creating vertices for screen
-        val scale = 30.0
         vertices = listOf(
             triangle.v1.point * scale + Point3D(xOffset.toDouble(), yOffset.toDouble(), 0.0),
             triangle.v2.point * scale + Point3D(xOffset.toDouble(), yOffset.toDouble(), 0.0),
@@ -176,12 +182,17 @@ class PolygonFiller(
 
     // Lighting experiments ------------------------------------------------------------------------
     fun calculatePhongLighting(
-        // Interpolated point using barycentric coordinates
-        point: Point3D,
-
+        x: Float,
+        y: Float,
+        vertices: List<Point3D>,
+        triangle: Triangle,
         // Phong parameters for lighting calculations
         params: PhongParameters
     ): Color {
+
+        // Get coordinates
+        val point = interpolatePoint(x, y, vertices, triangle)
+
         // Normalize vectors
         val N = interpolateNormal(point, triangle!!).normalize()
 
@@ -212,72 +223,112 @@ class PolygonFiller(
             return (diffuse + specular).coerceIn(0.0, 1.0).toFloat() * 255
         }
 
-        return Color(
-            red = calculateComponent(params.lightColor.x.toFloat(), params.objectColor.x.toFloat()),
-            green = calculateComponent(
-                params.lightColor.y.toFloat(),
-                params.objectColor.y.toFloat()
-            ),
-            blue = calculateComponent(
-                params.lightColor.z.toFloat(),
-                params.objectColor.z.toFloat()
-            ),
-        )
+        var color = Color.Transparent
+        if (!isTexture) {
+            color = Color(
+                red = calculateComponent(params.lightColor.x.toFloat(), params.objectColor.x.toFloat()),
+                green = calculateComponent(params.lightColor.y.toFloat(), params.objectColor.y.toFloat()),
+                blue = calculateComponent(params.lightColor.z.toFloat(), params.objectColor.z.toFloat()),
+            )
+        }
+        else {
+            val textureColor = getTextureColor(point.x, point.y, triangle)
+            color = Color(
+                red = calculateComponent(params.lightColor.x.toFloat(), textureColor.red),
+                green = calculateComponent(params.lightColor.y.toFloat(), textureColor.green),
+                blue = calculateComponent(params.lightColor.z.toFloat(), textureColor.blue),
+            )
+        }
+
+        return color
     }
 
     // TODO: DO ZMIANY
-    // Interpolate a point using barycentric coordinates
-    private fun interpolateBarycentric(
+    private fun interpolatePoint(
         x: Float,
         y: Float,
         vertices: List<Point3D>,
         triangle: Triangle
     ): Point3D {
-        val p = Point3D(x.toDouble(), y.toDouble(), 0.0)
         val v0 = vertices[0]
         val v1 = vertices[1]
         val v2 = vertices[2]
 
-        // Compute barycentric weights
-        val denom = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y)
-        val w0 = ((v1.y - v2.y) * (p.x - v2.x) + (v2.x - v1.x) * (p.y - v2.y)) / denom
-        val w1 = ((v2.y - v0.y) * (p.x - v2.x) + (v0.x - v2.x) * (p.y - v2.y)) / denom
-        val w2 = 1f - w0 - w1
+        val b = barycentric(x, y, v0, v1, v2)
 
-        // Interpolate 3D position using barycentric weights
         val p0 = triangle.v1.point
         val p1 = triangle.v2.point
         val p2 = triangle.v3.point
 
-        return (p0 * w0) + (p1 * w1) + (p2 * w2)
-        //return (v0 * w0) + (v1 * w1) + (v2 * w2)
+        return (p0 * b.first) + (p1 * b.second) + (p2 * b.third)
     }
 
-    // TODO: KONIECZNIE DO ZMIANY
-    fun interpolateNormal(
-        point: Point3D, // Punkt, dla którego interpolujemy normalną
+    // Function for getting barycentric coordinates
+    fun barycentric(
+        x: Float,
+        y: Float,
+        v0: Point3D,
+        v1: Point3D,
+        v2: Point3D
+    ): Triple<Double, Double, Double> {
+        val p = Point3D(x.toDouble(), y.toDouble(), 0.0)
+        val denominator = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y)
+        val w0 = ((v1.y - v2.y) * (p.x - v2.x) + (v2.x - v1.x) * (p.y - v2.y)) / denominator
+        val w1 = ((v2.y - v0.y) * (p.x - v2.x) + (v0.x - v2.x) * (p.y - v2.y)) / denominator
+        val w2 = 1f - w0 - w1
+
+        return Triple(w0, w1, w2)
+    }
+
+    fun interpolateUv(
+        point: Point3D,
         triangle: Triangle
     ): Point3D {
-        // Wierzchołki trójkąta
+        val b = barycentric(point.x.toFloat(), point.y.toFloat(), triangle.v1.point, triangle.v2.point, triangle.v3.point)
+
+        val u0 = triangle.v1.u
+        val u1 = triangle.v2.u
+        val u2 = triangle.v3.u
+
+        val v0 = triangle.v1.v
+        val v1 = triangle.v2.v
+        val v2 = triangle.v3.v
+
+        var res = Point3D(
+            (u0 * b.first) + (u1 * b.second) + (u2 * b.third),
+            (v0 * b.first) + (v1 * b.second) + (v2 * b.third),
+            0.0)
+
+        return res
+    }
+
+    fun interpolateNormal(
+        point: Point3D,
+        triangle: Triangle
+    ): Point3D {
         val v0 = triangle.v1.point
         val v1 = triangle.v2.point
         val v2 = triangle.v3.point
 
-        // Wektory normalne wierzchołków trójkąta
         val n0 = triangle.v1.normal
         val n1 = triangle.v2.normal
         val n2 = triangle.v3.normal
 
-        // Oblicz współczynniki barycentryczne dla punktu
-        val denom = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y)
-        val w0 = ((v1.y - v2.y) * (point.x - v2.x) + (v2.x - v1.x) * (point.y - v2.y)) / denom
-        val w1 = ((v2.y - v0.y) * (point.x - v2.x) + (v0.x - v2.x) * (point.y - v2.y)) / denom
-        val w2 = 1f - w0 - w1
+        val b = barycentric(point.x.toFloat(), point.y.toFloat(), v0, v1, v2)
 
-        // Zinterpoluj wektor normalny przy użyciu współczynników barycentrycznych
-        val interpolatedNormal = (n0 * w0) + (n1 * w1) + (n2 * w2)
+        val interpolatedNormal = (n0 * b.first) + (n1 * b.second) + (n2 * b.third)
 
-        // Zwróć znormalizowaną normalną
         return interpolatedNormal.normalize()
+    }
+
+    fun getTextureColor(
+        x: Double,
+        y: Double,
+        triangle: Triangle
+    ): Color {
+        val uv = interpolateUv(Point3D(x, y, 0.0), triangle)
+        val tx = (uv.x * (texture!!.size - 1)).toInt().coerceIn(0, texture!!.size - 1)
+        val ty = (uv.y * (texture!![0].size - 1)).toInt().coerceIn(0, texture!![0].size - 1)
+        return texture!![tx][ty]
     }
 }

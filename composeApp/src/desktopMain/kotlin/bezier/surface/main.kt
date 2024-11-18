@@ -5,6 +5,8 @@ import androidx.compose.ui.window.application
 
 import androidx.compose.material.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.rememberWindowState
 import bezier.surface.view.BezierSurfaceViewer
 import java.awt.Toolkit
 
@@ -12,12 +14,9 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "Bezier Surface Viewer",
-        resizable = true
+        resizable = false,
+        state = rememberWindowState(width = 1500.dp, height = 900.dp)
     ) {
-        // get the size of the screen
-         val screenSize = Toolkit.getDefaultToolkit().screenSize
-
-        this.window.setSize(screenSize.width / 2, screenSize.height / 2)
         MaterialTheme {
             Surface(color = Color.DarkGray) {
                 BezierSurfaceViewer()

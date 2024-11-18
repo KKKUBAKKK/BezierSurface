@@ -10,11 +10,11 @@ import bezier.surface.model.PhongParameters
 import bezier.surface.model.Point2D
 import bezier.surface.model.Point3D
 import bezier.surface.model.Triangle
-import bezier.surface.model.Triangle2D
 import bezier.surface.model.Vertex
-import org.jetbrains.skia.Point
 import java.io.File
+import javax.imageio.ImageIO
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sin
 
 class BezierSurfaceViewModel (
@@ -24,7 +24,8 @@ class BezierSurfaceViewModel (
     var showWireframe by mutableStateOf(true)
     var showFilled by mutableStateOf(false)
     var lineColor by mutableStateOf(Color.White)
-    var fillColor by mutableStateOf(Point3D(1.0, 0.0, 0.0))
+    var fillColor by mutableStateOf(Point3D(0.5, 0.0, 0.5))
+    var scale = 50.0
 
     // Surface parameters
     var rotationXBeta by mutableStateOf(0f)
@@ -32,15 +33,25 @@ class BezierSurfaceViewModel (
     var resolution by mutableStateOf(3)
 
     // Light parameters
+    var lightMove  by mutableStateOf(false)
+    var lightPosition by mutableStateOf(Point3D(0.0, 0.0, 10.0))
     var lightColor by mutableStateOf(Point3D(1.0, 1.0, 1.0))
     var kd by mutableStateOf(0.5f)
     var ks by mutableStateOf(0.5f)
     var m by mutableStateOf(10f)
     private var currentTime by mutableStateOf(0f)
-    private val spiralRadius = 100.0  // Adjust this to control how wide the spiral is
-    private val spiralHeight = 5.0   // Fixed height of the light
+    private val spiralRadius = 5.0  // Adjust this to control how wide the spiral is
+    private val spiralHeight = 10.0   // Fixed height of the light
     private val rotationSpeed = 0.1f // Adjust to control animation speed
-    private val spiralTightness = 0.5 // Adjust to control how tight the spiral is
+//    private val spiralTightness = 0.5 // Adjust to control how tight the spiral is
+
+    // Normal mapping parameters
+    var isMapping = false
+    var normalMap = arrayOf<Array<Point3D>>()
+
+    // Texture parameters
+    var isTexture = false
+    var texture = arrayOf<Array<Color>>()
 
     // Canvas size
     var width: Int = 1600
@@ -58,16 +69,15 @@ class BezierSurfaceViewModel (
         return Point3D(x, y, spiralHeight)
     }
 
-    // Initialize control points from file
-    private val controlPoints = read4x4ArrayFromFile(pathToPoints)
+//    // Initialize control points from file
+    private val controlPoints = readFromFile(pathToPoints)
 
     // Mesh
     private var mesh: Mesh? = null
 
     // Function to read a 4x4 array of doubles from a file
-    fun read4x4ArrayFromFile(filePath: String): Array<Array<Vertex>> {
-        // Create a 4x4 array to hold the double values
-        val array = Array(4) { Array(4) { Vertex() } }
+    fun readFromFile(filePath: String): List<Point3D> {
+        val list = mutableListOf<Point3D>()
 
         // Read the file line by line
         val lines = File(filePath).readLines()
@@ -89,11 +99,11 @@ class BezierSurfaceViewModel (
                     throw IllegalArgumentException("Each line must contain exactly 3 values.")
                 }
                 val point = Point3D(line[0], line[1], line[2])
-                array[i][j] = Vertex(point = point)
+                list.add(point)
             }
         }
 
-        return array
+        return list
     }
 
     // Function that generates a mesh from the control points
@@ -108,10 +118,10 @@ class BezierSurfaceViewModel (
                 val v1 = j * step
                 val v2 = (j + 1) * step
 
-                val p1 = calculateSurfaceProperties(u1, v1)
-                val p2 = calculateSurfaceProperties(u2, v1)
-                val p3 = calculateSurfaceProperties(u1, v2)
-                val p4 = calculateSurfaceProperties(u2, v2)
+                var p1 = calculateSurfaceProperties(u1, v1)
+                var p2 = calculateSurfaceProperties(u2, v1)
+                var p3 = calculateSurfaceProperties(u1, v2)
+                var p4 = calculateSurfaceProperties(u2, v2)
 
                 triangles.add(Triangle(p1, p2, p3))
                 triangles.add(Triangle(p2, p4, p3))
@@ -131,49 +141,63 @@ class BezierSurfaceViewModel (
     private fun interpolateSurfacePoint(u: Double, v: Double): Point3D {
         var point = Point3D.Zero()
 
-        // Loop through control points grid (4x4)
+        // Loop through control points
         for (i in 0..3) {
             for (j in 0..3) {
                 val basisU = bernstein(i, 3, u)
                 val basisV = bernstein(j, 3, v)
-                point += controlPoints[i][j].point * (basisU * basisV)
+                point += controlPoints[i * 4 + j] * (basisU * basisV)
             }
         }
 
         return point
     }
 
-    // TODO: Check if this is correct
+    // TODO: chyba jakos zle sie obliczaja
     private fun calculatePu(u: Double, v: Double): Point3D {
         var pu = Point3D.Zero()
-        val n = 3  // degree of the surface in u direction
+        val n = 3  // degree of the surface
 
-        // Sum up to n-1 because we're using differences between points
-        for (i in 0..2) {
+        for (i in 0..3) {
             for (j in 0..3) {
-                // Calculate vector between adjacent control points in u direction
-                val deltaU = controlPoints[i + 1][j].point - controlPoints[i][j].point
-                val basisUPrime = bernstein(i, 2, u)  // n-1 degree for derivative
                 val basisV = bernstein(j, 3, v)
-                pu += deltaU * (n * basisUPrime * basisV)
+                // Calculate the derivative of the Bernstein polynomial with respect to u
+                val basisUPrime = if (i == 0) {
+                    -3 * (1 - u).pow(2)
+                } else if (i == 1) {
+                    3 * (1 - u).pow(2) - 6 * u * (1 - u)
+                } else if (i == 2) {
+                    6 * u * (1 - u) - 3 * u.pow(2)
+                } else {
+                    3 * u.pow(2)
+                }
+
+                pu += controlPoints[i * 4 + j] * (basisUPrime * basisV)
             }
         }
 
         return pu
     }
 
-    // TODO: Check if this is correct
     private fun calculatePv(u: Double, v: Double): Point3D {
         var pv = Point3D.Zero()
-        val m = 3  // degree of the surface in v direction
+        val m = 3  // degree of the surface
 
         for (i in 0..3) {
-            for (j in 0..2) {
-                // Calculate vector between adjacent control points in v direction
-                val deltaV = controlPoints[i][j + 1].point - controlPoints[i][j].point
+            for (j in 0..3) {
                 val basisU = bernstein(i, 3, u)
-                val basisVPrime = bernstein(j, 2, v)  // m-1 degree for derivative
-                pv += deltaV * (m * basisU * basisVPrime)
+                // Calculate the derivative of the Bernstein polynomial with respect to v
+                val basisVPrime = if (j == 0) {
+                    -3 * (1 - v).pow(2)
+                } else if (j == 1) {
+                    3 * (1 - v).pow(2) - 6 * v * (1 - v)
+                } else if (j == 2) {
+                    6 * v * (1 - v) - 3 * v.pow(2)
+                } else {
+                    3 * v.pow(2)
+                }
+
+                pv += controlPoints[i * 4 + j] * (basisU * basisVPrime)
             }
         }
 
@@ -181,14 +205,44 @@ class BezierSurfaceViewModel (
     }
 
     private fun calculateNormal(pu: Point3D, pv: Point3D): Point3D {
-        return (pu cross pv).normalized()
+        val normal = pu cross pv
+
+        return if (normal.z < 0) {
+            (normal * (-1).toDouble()).normalized()
+        } else {
+            normal.normalized()
+        }
+    }
+
+    private fun calculateNormalFromMap(u: Double, v: Double): Point3D {
+        val x = (u * (normalMap.size - 1)).coerceIn(0.0, normalMap.size - 2.0).toInt()
+        val y = (v * (normalMap[0].size - 1)).coerceIn(0.0, normalMap[0].size - 2.0).toInt()
+
+        val tl = normalMap[x][y]
+        val tr = normalMap[x + 1][y]
+        val bl = normalMap[x][y + 1]
+        val br = normalMap[x + 1][y + 1]
+
+        val dx = u * (normalMap.size - 1) - x
+        val dy = v * (normalMap[0].size - 1) - y
+
+        val top = tl * (1 - dx) + tr * dx
+        val bottom = bl * (1 - dx) + br * dx
+
+        val res = top * (1 - dy) + bottom * dy
+
+        return res
     }
 
     private fun calculateSurfaceProperties(u: Double, v: Double): Vertex {
         val point = interpolateSurfacePoint(u, v)
         val pu = calculatePu(u, v)
         val pv = calculatePv(u, v)
-        val normal = calculateNormal(pu, pv)
+        var normal = calculateNormal(pu, pv)
+
+        if (isMapping) {
+            normal = calculateNormalFromMap(u, v)
+        }
 
         return Vertex(
             point = point,
@@ -213,8 +267,8 @@ class BezierSurfaceViewModel (
 
     // Function to transform a 3D point to a 2D point on the screen
     private fun transformPoint(vertex: Vertex, canvasWidth: Float, canvasHeight: Float): Point2D {
-        val rotatedVertex = rotatePoint(vertex, rotationZAlpha, rotationXBeta)
-        val scale = 30.0
+        val rotatedVertex = rotateVertex(vertex, rotationZAlpha, rotationXBeta)
+        val scale = scale
         val perspectiveZ = 1.0// + rotatedVertex.point.z * 0.2
 
         return Point2D(
@@ -225,49 +279,56 @@ class BezierSurfaceViewModel (
 
     // Function to rotate a 3D triangle around X and Z axes
     fun rotateTriangle(triangle: Triangle, alpha: Float, beta: Float): Triangle {
-        val v1 = rotatePoint(triangle.v1, alpha, beta)
-        val v2 = rotatePoint(triangle.v2, alpha, beta)
-        val v3 = rotatePoint(triangle.v3, alpha, beta)
+        val v1 = rotateVertex(triangle.v1, alpha, beta)
+        val v2 = rotateVertex(triangle.v2, alpha, beta)
+        val v3 = rotateVertex(triangle.v3, alpha, beta)
         return Triangle(v1, v2, v3)
     }
 
-    // TODO: KONIECZNIE ZAMIEN
-    // Function to rotate a vertex around X and Z axes, preserving UV coordinates and rotating the normal
-    fun rotatePoint(vertex: Vertex, alpha: Float, beta: Float): Vertex {
-        val point = vertex.point
-        val normal = vertex.normal
+    // Function to rotate a 3D vertex around X and Z axes
+    fun rotateVertex(vertex: Vertex, alpha: Float, beta: Float): Vertex {
+        // Create rotation matrices
+        val cosA = cos(alpha)
+        val sinA = sin(alpha)
+        val cosB = cos(beta)
+        val sinB = sin(beta)
 
-        // Rotation around Z-axis (alpha) for position
-        val x1 = point.x * cos(alpha) - point.y * sin(alpha)
-        val y1 = point.x * sin(alpha) + point.y * cos(alpha)
+        // Rotate around Z-axis
+        val x1 = vertex.point.x * cosA - vertex.point.y * sinA
+        val y1 = vertex.point.x * sinA + vertex.point.y * cosA
+        val z1 = vertex.point.z
 
-        // Rotation around X-axis (beta) for position
-        val z1 = point.z * cos(beta) - y1 * sin(beta)
-        val y2 = point.z * sin(beta) + y1 * cos(beta)
+        // Rotate around X-axis
+        val x2 = x1
+        val y2 = z1 * cosB - y1 * sinB
+        val z2 = z1 * sinB + y1 * cosB
 
-        // Rotate the normal vector similarly to the position
-        val nx1 = normal.x * cos(alpha) - normal.y * sin(alpha)
-        val ny1 = normal.x * sin(alpha) + normal.y * cos(alpha)
+        // Apply the same rotation to the normal vector
+        val nx1 = vertex.normal.x * cosA - vertex.normal.y * sinA
+        val ny1 = vertex.normal.x * sinA + vertex.normal.y * cosA
+        val nz1 = vertex.normal.z
 
-        val nz1 = normal.z * cos(beta) - ny1 * sin(beta)
-        val ny2 = normal.z * sin(beta) + ny1 * cos(beta)
+        val nx2 = nx1
+        val ny2 = nz1 * cosB - ny1 * sinB
+        val nz2 = nz1 * sinB + ny1 * cosB
 
-        // Return a new Vertex with the rotated position and normal, and the same UV coordinates
         return Vertex(
-            point = Point3D(x1, y2, z1),
-            normal = Point3D(nx1, ny2, nz1).normalize(), // Normalize the rotated normal
+            point = Point3D(x2, y2, z2),
+            normal = Point3D(nx2, ny2, nz2).normalize(),
             u = vertex.u,
             v = vertex.v
         )
     }
 
     fun drawSurface(drawScope: DrawScope, width: Int, height: Int) {
-        // Update time
-        currentTime += rotationSpeed
 
-        // Calculate new light position
-        val lightPosition = calculateLightPosition()
-//        val lightPosition = Point3D(0.0, 0.0, 5.0)
+        if (lightMove) {
+            // Update time
+            currentTime += rotationSpeed
+
+            // Calculate new light position
+            lightPosition = calculateLightPosition()
+        }
 
         if (mesh == null || mesh?.canvasWidth != width || mesh?.canvasHeight != height || mesh?.resolution != resolution) {
             mesh = generateMesh(resolution)
@@ -289,7 +350,7 @@ class BezierSurfaceViewModel (
                     fillColor,
                     lightPosition
                 )
-                val polygonFiller = PolygonFiller(width, height, pixelBuffer, phong)
+                val polygonFiller = PolygonFiller(width, height, pixelBuffer, phong, isTexture, texture)
 
                 rotatedTriangles?.forEach {
                     polygonFiller.fillPolygon(it)
@@ -333,5 +394,65 @@ class BezierSurfaceViewModel (
                 }
             }
         }
+    }
+
+    fun newMapping(path: String?) {
+        isMapping = true
+        normalMap = fillNormalMap(path!!)
+    }
+
+    fun newTexture(path: String?) {
+        isTexture = true
+        texture = fillTexture(path!!)
+    }
+
+    fun fillNormalMap(path: String): Array<Array<Point3D>> {
+        val file = File(path)
+        val normalImage = ImageIO.read(file)
+        val normalMap = Array(normalImage.width) { Array(normalImage.height) { Point3D.Zero() } }
+
+        for (x in 0 until normalImage.width) {
+            for (y in 0 until normalImage.height) {
+                val rgb = normalImage.getRGB(x, y)
+                val r = (rgb shr 16 and 0xFF) / 255f
+                val g = (rgb shr 8 and 0xFF) / 255f
+                val b = (rgb and 0xFF) / 255f
+
+                val normal = Point3D(
+                    x = 2.0 * r - 1.0,
+                    y = 2.0 * g - 1.0,
+                    z = 2.0 * b - 1.0
+                ).normalize()
+
+                normalMap[x][y] = normal
+            }
+        }
+
+        return normalMap
+    }
+
+    fun fillTexture(path: String): Array<Array<Color>> {
+        val file = File(path)
+        val textureImage = ImageIO.read(file)
+        val texture = Array(textureImage.width) { Array(textureImage.height) { Color.Black } }
+
+        for (x in 0 until textureImage.width) {
+            for (y in 0 until textureImage.height) {
+                val rgb = textureImage.getRGB(x, y)
+                val alpha = (rgb shr 24) and 0xFF
+                val red = (rgb shr 16) and 0xFF
+                val green = (rgb shr 8) and 0xFF
+                val blue = rgb and 0xFF
+
+                texture[x][y] = Color(
+                    red = red / 255f,
+                    green = green / 255f,
+                    blue = blue / 255f,
+                    alpha = alpha / 255f
+                )
+            }
+        }
+
+        return texture
     }
 }

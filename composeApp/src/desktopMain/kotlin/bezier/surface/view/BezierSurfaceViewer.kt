@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bezier.surface.viewmodel.BezierSurfaceViewModel
+import java.awt.FileDialog
+import java.awt.Frame
+
 
 @Composable
 fun BezierSurfaceViewer() {
@@ -44,7 +47,7 @@ fun BezierSurfaceViewer() {
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+//                Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = viewModel.showWireframe,
                         onCheckedChange = {
@@ -56,11 +59,11 @@ fun BezierSurfaceViewer() {
                     )
                     Spacer(modifier = Modifier.width(4.dp)) // Adjust spacing between checkbox and label
                     Text("Wireframe", fontSize = 12.sp)
-                }
+//                }
 
                 Spacer(modifier = Modifier.width(16.dp)) // Adjust spacing between checkboxes
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+//                Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = viewModel.showFilled,
                         onCheckedChange = {
@@ -72,6 +75,55 @@ fun BezierSurfaceViewer() {
                     )
                     Spacer(modifier = Modifier.width(4.dp)) // Adjust spacing between checkbox and label
                     Text("Filled", fontSize = 12.sp)
+//                }
+
+                Spacer(modifier = Modifier.width(16.dp)) // Adjust spacing between checkboxes
+
+//                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = viewModel.lightMove,
+                        onCheckedChange = {
+                            if (it || viewModel.showFilled) {
+                                viewModel.lightMove = it
+                            }
+                        },
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp)) // Adjust spacing between checkbox and label
+                    Text("Light move", fontSize = 12.sp)
+//                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+//                Button(
+//                    onClick = {
+//                        val path = openFileDialog("src/Resources/control_points")
+//                    },
+//                    modifier = Modifier.weight(1f),
+//                    colors = ButtonDefaults.buttonColors(backgroundColor = Color.White)
+//                ) {
+//                    Text("Choose control points", fontSize = 10.sp)
+//                }
+
+                Button(
+                    onClick = {
+                        viewModel.newMapping(openFileDialog("src/Resources/normal_maps"))
+//                    viewModel.updateNormalMapping(true, openFileDialog("src/normal-maps"))
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(backgroundColor = Color.White)
+                ) {
+                    Text("Choose normal map", fontSize = 10.sp)
+                }
+
+                Button(
+                    onClick = {
+                    viewModel.newTexture(openFileDialog("src/Resources/textures"))
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(backgroundColor = Color.White)
+                ) {
+                    Text("Choose texture", fontSize = 10.sp)
                 }
             }
 
@@ -93,11 +145,11 @@ fun BezierSurfaceViewer() {
             )
 
             // Resolution control
-            Text("Mesh Resolution", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            Text("Triangulation", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
             Slider(
                 value = viewModel.resolution.toFloat(),
                 onValueChange = { viewModel.resolution = it.toInt() },
-                valueRange = 3f..30f,
+                valueRange = 3f..50f,
                 steps = 25,
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
@@ -129,14 +181,19 @@ fun BezierSurfaceViewer() {
                 modifier = Modifier.fillMaxWidth().height(20.dp)
             )
 
-//            // Color picker
-//            Text("Light Color", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-//            ColorPickerControl(
-//                initialColor = Color((viewModel.lightColor.x * 255).toFloat(),
-//                    (viewModel.lightColor.y * 255).toFloat(),
-//                    (viewModel.lightColor.z * 255).toFloat())
-//                onColorSelected = { viewModel.lightColor = it }
-//            )
+            // Color picker
+            Text("Light Color", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            ColorPickerControl(
+                initialColor = viewModel.lightColor,
+                onColorSelected = { viewModel.lightColor = it }
+            )
         }
     }
+}
+
+fun openFileDialog(defaultDirectory: String = System.getProperty("user.home")): String? {
+    val fileDialog = FileDialog(null as Frame?, "Select a File", FileDialog.LOAD)
+    fileDialog.directory = defaultDirectory
+    fileDialog.isVisible = true
+    return fileDialog.file?.let { fileDialog.directory + it }
 }
