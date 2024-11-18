@@ -4,71 +4,65 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import bezier.surface.model.Edge
 import bezier.surface.model.PhongParameters
-import bezier.surface.model.Point2D
 import bezier.surface.model.Point3D
 import bezier.surface.model.Triangle
-import bezier.surface.model.Triangle2D
-import bezier.surface.model.Vertex
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 
-//import bezier.surface.model.Edge
-
 //data class Edge(
-//    val yMaxIdx: Int,
-//    val yMax: Double,
-//    var yIdx: Int,
+//    val yMax: Int,
 //    var y: Double,
-//    var xIdx: Int,
 //    var x: Double,
 //    val slope: Double,
 //)
 
 class PolygonFiller(
+    // Canvas size
     private var width: Int,
     private var height: Int,
+
+    // Pixel buffer
     private var pixelBuffer: Array<IntArray>,
+
+    // Phong parameters for lighting calculations
     private var phongParameters: PhongParameters
 ) {
+    // Edge table and active edge table for scan line algorithm
     private lateinit var ET: Array<MutableList<Edge>>
     private var AET = mutableListOf<Edge>()
+
+    // Scanline and offsets
     private var scanline = 0
     private var yOffset = height / 2
     private var xOffset = width / 2
+
+    // Triangle before changing and vertices after
     private var triangle: Triangle? = null
     private lateinit var vertices: List<Point3D>
 
+    // Initialize edge table
     init {
         this.yOffset = height / 2
         this.xOffset = width / 2
         ET = Array(height + 1) { mutableListOf() }
     }
 
-    private fun yToIndex(y: Double): Int {
-//        return (y + yOffset).toInt()
-        return (y).toInt()
-    }
-
-    private fun xToIndex(x: Double): Int {
-//        return (x + xOffset).toInt()
-        return (x).toInt()
-    }
-
+    // Load ET with edges index by yMin
     private fun loadEdgeTable(vertices: List<Point3D>) {
         for (i in 0 until vertices.size) {
             val v1 = vertices[i]
             val v2 = vertices[(i + 1) % vertices.size]
 
             if (abs(v1.y - v2.y) < 1) { // TODO: Handle horizontal lines
-                val startX = xToIndex(min(v1.x, v2.x).toDouble())
-                val endX = yToIndex(max(v1.x, v2.x).toDouble())
-                val y = yToIndex(v1.y.toDouble())
+                val startX = min(v1.x, v2.x)
+                val endX = max(v1.x, v2.x)
+                val y = v1.y
                 if (y < 0 || y >= height || startX < 0 || startX >= width || endX < 0 || endX >= width) {
                     continue
                 }
-                fillScanLine(startX, endX, y)
+                fillScanLine(startX.toInt(), endX.toInt(), y.toInt())
                 continue
             }
 
@@ -76,25 +70,23 @@ class PolygonFiller(
             val end = if (v1.y < v2.y) v2 else v1
 
             val edge = Edge(
-                yMaxIdx = yToIndex(end.y.toDouble()) - 1,
-                yMax = end.y.toDouble() - 1,
-                yIdx = yToIndex(start.y.toDouble()),
-                y = start.y.toDouble(),
-                xIdx = xToIndex(start.x.toDouble()),
-                x = start.x.toDouble(),
-                slope = (end.x.toDouble() - start.x.toDouble()) / (end.y.toDouble() - start.y.toDouble())
+                yMax = end.y.toInt() - 1,
+                y = start.y,
+                x = start.x,
+                slope = (end.x - start.x) / (end.y - start.y) // TODO: jesli slope jest maly to moga byc problemy
             )
 
-            ET[edge.yIdx].add(edge)
+            ET[edge.y.toInt()].add(edge)
         }
     }
 
+    // Bucket sort for AET
     private fun bucketSort() {
         val bucketCount = width + 1
         val buckets = Array(bucketCount) { mutableListOf<Edge>() }
 
         for (edge in AET) {
-            buckets[edge.xIdx].add(edge)
+            buckets[edge.x.toInt()].add(edge)
         }
 
         AET.clear()
@@ -105,50 +97,59 @@ class PolygonFiller(
         }
     }
 
+    // Getting indexes to fill the line
     private fun fillScanLine() {
         for (i in 0 until AET.size - 1 step 2) {
             val left = AET[i]
             val right = AET[i + 1]
 
-            val y = left.yIdx;
-            val xStart = left.xIdx;
-            val xEnd = right.xIdx;
+            val y = left.y.toInt();
+            val xStart = left.x.toInt();
+            val xEnd = right.x.toInt();
             fillScanLine(xStart, xEnd, y)
         }
     }
 
+    // Filling the line with color
     private fun fillScanLine(xStart: Int, xEnd: Int, y: Int) {
-        for (x in xStart .. xEnd) {
+        for (x in xStart..xEnd) {
             val point = interpolateBarycentric(x.toFloat(), y.toFloat(), vertices, triangle!!)
             val color = calculatePhongLighting(point, phongParameters)
             pixelBuffer[x][y] = color.toArgb()
-//            val point = Point2D((x - xOffset).toDouble(), (y - yOffset).toDouble())
-//            val color = calculatePixelColor(point, triangle!!, phongParameters)
-//            pixelBuffer[x][y] = color.toArgb()
         }
     }
 
+    // Checking if ET is empty
     fun isETEmpty(): Boolean {
         return ET.firstOrNull() { it.isNotEmpty() } == null
     }
 
-    // TODO: moze trzeba by na wektorach dodatnich zrobic
+    // Filling given triangle with color
     fun fillPolygon(triangle: Triangle): Array<IntArray> {
-        val scale = 30.0 // TODO: sprawdzic zeby nie wyszlo poza skale
+        // Setting the triangle
         this.triangle = triangle
+
+        // Creating vertices for screen
+        val scale = 30.0
         vertices = listOf(
             triangle.v1.point * scale + Point3D(xOffset.toDouble(), yOffset.toDouble(), 0.0),
             triangle.v2.point * scale + Point3D(xOffset.toDouble(), yOffset.toDouble(), 0.0),
             triangle.v3.point * scale + Point3D(xOffset.toDouble(), yOffset.toDouble(), 0.0)
         )
+
+        // Loading edge table with edges for the screen
         loadEdgeTable(vertices)
+
+        // Finding the first non-empty scanline
         scanline = ET.indexOfFirst { it.isNotEmpty() }
-        while (!isETEmpty() || AET.isNotEmpty())
-        {
+
+        // Scanline algorithm
+        while (!isETEmpty() || AET.isNotEmpty()) {
             // Move edges with yMin = scanline from ET to AET
             AET.addAll(ET[scanline])
             ET[scanline].clear()
 
+            // If there is more than one edge in AET, sort them by x and fill the scanline
             if (AET.size > 1) {
                 // Sort AET by x
                 bucketSort()
@@ -158,7 +159,7 @@ class PolygonFiller(
             }
 
             // Delete edges with yMax = scanline from AET
-            AET.removeIf { it.yMaxIdx <= scanline }
+            AET.removeIf { it.yMax <= scanline }
 
             // Update the scanline
             scanline++;
@@ -166,9 +167,7 @@ class PolygonFiller(
             // Update x coordinates for next scanline (and indexes)
             for (edge in AET) {
                 edge.y += 1
-                edge.yIdx = yToIndex(edge.y)
                 edge.x += edge.slope
-                edge.xIdx = xToIndex(edge.x)
             }
         }
 
@@ -177,17 +176,20 @@ class PolygonFiller(
 
     // Lighting experiments ------------------------------------------------------------------------
     fun calculatePhongLighting(
+        // Interpolated point using barycentric coordinates
         point: Point3D,
+
+        // Phong parameters for lighting calculations
         params: PhongParameters
     ): Color {
         // Normalize vectors
-        val N = interpolateNormal(point, triangle!!)
+        val N = interpolateNormal(point, triangle!!).normalize()
 
         // Calculate light direction vector (L)
         val L = (params.lightPosition - point).normalize()
 
         // View vector is [0, 0, 1] normalized
-        val V = Point3D(0.0, 0.0, -5.0)
+        val V = Point3D(0.0, 0.0, -5.0).normalize()
 
         // Calculate reflection vector (R)
         val NdotL = N.dot(L)
@@ -212,8 +214,14 @@ class PolygonFiller(
 
         return Color(
             red = calculateComponent(params.lightColor.x.toFloat(), params.objectColor.x.toFloat()),
-            green = calculateComponent(params.lightColor.y.toFloat(), params.objectColor.y.toFloat()),
-            blue = calculateComponent(params.lightColor.z.toFloat(), params.objectColor.z.toFloat()),
+            green = calculateComponent(
+                params.lightColor.y.toFloat(),
+                params.objectColor.y.toFloat()
+            ),
+            blue = calculateComponent(
+                params.lightColor.z.toFloat(),
+                params.objectColor.z.toFloat()
+            ),
         )
     }
 
@@ -272,86 +280,4 @@ class PolygonFiller(
         // Zwróć znormalizowaną normalną
         return interpolatedNormal.normalize()
     }
-
-//    // Helper function to interpolate values using barycentric coordinates
-//    fun interpolateWithBarycentric(
-//        v1: Point3D,
-//        v2: Point3D,
-//        v3: Point3D,
-//        barycentricCoords: Triple<Double, Double, Double>
-//    ): Point3D {
-//        val (w1, w2, w3) = barycentricCoords
-//        return Point3D(
-//            x = w1 * v1.x + w2 * v2.x + w3 * v3.x,
-//            y = w1 * v1.y + w2 * v2.y + w3 * v3.y,
-//            z = w1 * v1.z + w2 * v2.z + w3 * v3.z
-//        )
-//    }
-//
-//    // Calculate barycentric coordinates for a point inside a triangle
-//    fun calculateBarycentricCoordinates(
-//        point: Point2D,
-//        v1: Point3D,
-//        v2: Point3D,
-//        v3: Point3D
-//    ): Triple<Double, Double, Double> {
-//        val denominator = (v2.y - v3.y) * (v1.x - v3.x) + (v3.x - v2.x) * (v1.y - v3.y)
-//
-//        val w1 = ((v2.y - v3.y) * (point.x - v3.x) + (v3.x - v2.x) * (point.y - v3.y)) / denominator
-//        val w2 = ((v3.y - v1.y) * (point.x - v3.x) + (v1.x - v3.x) * (point.y - v3.y)) / denominator
-//        val w3 = 1 - w1 - w2
-//
-//        return Triple(w1, w2, w3)
-//    }
-
-//    // Extension function to integrate with ScanlinePolygonFiller
-//    fun calculatePixelColor(
-//        point: Point2D,
-//        triangle: Triangle,
-//        params: PhongParameters
-//    ): Color {
-//        // Calculate barycentric coordinates for the point
-//        val barycentricCoords = calculateBarycentricCoordinates(
-//            point,
-//            triangle.v1.point,
-//            triangle.v2.point,
-//            triangle.v3.point
-//        )
-//
-////        // TODO: zmienilem z vertex1 na v1 zeby zobaczyc co jak wezme normal z 2d zamiast vertex
-////        // Interpolate normal vector using barycentric coordinates
-////        val interpolatedNormal = interpolateWithBarycentric(
-////            triangle.v1.normal,
-////            triangle.v2.normal,
-////            triangle.v3.normal,
-////            barycentricCoords
-////        ).normalize()
-////
-////        // Interpolate z coordinate
-////        val interpolatedZ = interpolateWithBarycentric(
-////            Point3D(0.0, 0.0, triangle.v1.point.z.toDouble()),
-////            Point3D(0.0, 0.0, triangle.v2.point.z.toDouble()),
-////            Point3D(0.0, 0.0, triangle.v3.point.z.toDouble()),
-////            barycentricCoords
-////        ).z
-////
-////        // Create 3D point from 2D point and interpolated z
-////        val point3D = Point3D(point.x, point.y, interpolatedZ)
-//
-//        var point3D = interpolateWithBarycentric(
-//            triangle.v1.point,
-//            triangle.v2.point,
-//            triangle.v3.point,
-//            barycentricCoords
-//        )
-//
-//        var interpolatedNormal = interpolateWithBarycentric(
-//            triangle.v1.normal,
-//            triangle.v2.normal,
-//            triangle.v3.normal,
-//            barycentricCoords
-//        ).normalize()
-//
-//        return calculatePhongLighting(point3D, interpolatedNormal, params)
-//    }
 }
